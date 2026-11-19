@@ -1,0 +1,74 @@
+1
+00:00:00,200 --> 00:00:03,450
+Este es el MVP de HIVE.
+
+2
+00:00:03,700 --> 00:00:05,089
+Llega un camión.
+
+3
+00:00:05,139 --> 00:00:11,383
+El portal RFID lee cada caja y HIVE la
+compara con la orden de compra:
+
+4
+00:00:11,433 --> 00:00:14,350
+llegaron once de doce; falta una.
+
+5
+00:00:14,600 --> 00:00:23,550
+En el conteo con lector de mano, las
+mochilas del pallet cero cero uno aparecen
+en el pasillo D, no donde estaban
+registradas.
+
+6
+00:00:23,800 --> 00:00:27,650
+HIVE no corrige solo: pide verificarlo.
+
+7
+00:00:27,900 --> 00:00:32,127
+Aparte, calcula la cobertura: sesenta días
+frente a un objetivo de treinta;
+
+8
+00:00:32,177 --> 00:00:35,150
+dos mil cuatrocientos dólares de exposición
+estimada.
+
+9
+00:00:35,400 --> 00:00:41,150
+Recomienda redistribuir trescientas
+unidades, y una persona aprueba.
+
+10
+00:00:41,400 --> 00:00:44,946
+La aprobación crea una tarea. Simulamos la
+ejecución:
+
+11
+00:00:44,996 --> 00:00:47,863
+el montacargas lleva dos pallets al muelle.
+
+12
+00:00:47,913 --> 00:00:56,750
+Cuando Quito Sur confirma la recepción,
+ambas bodegas quedan en treinta días y el
+total, seiscientas noventa unidades, se
+conserva.
+
+13
+00:00:57,000 --> 00:01:02,150
+Y la analítica se actualiza con los mismos
+datos: medir cierra el ciclo.
+
+14
+00:01:02,400 --> 00:01:05,361
+Hoy las lecturas son simuladas; la lógica
+funciona.
+
+15
+00:01:05,411 --> 00:01:08,550
+El siguiente paso es un piloto en una bodega
+de Quito.
+
