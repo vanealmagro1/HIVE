@@ -108,6 +108,7 @@ p { margin: 0 0 10px; }
 .label3d-unit.is-alert { background: var(--amber); color: #fff; }
 .label3d-ghost { white-space: nowrap; font-size: 13px; font-weight: 700; color: #6b3f00; background: rgba(251, 239, 217, 0.95); border: 2px dashed var(--amber); padding: 3px 8px; border-radius: 4px; }
 .label3d-missing { white-space: nowrap; font-size: 13px; font-weight: 800; color: #fff; background: var(--red); padding: 3px 8px; border-radius: 4px; }
+.label3d-operator { white-space: nowrap; font-size: 12px; font-weight: 800; color: var(--teal-900); background: var(--lime); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--teal-600); }
 .label3d-ghost small { font-weight: 500; font-size: 12px; }
 
 /* Ficha flotante única del elemento enfocado */

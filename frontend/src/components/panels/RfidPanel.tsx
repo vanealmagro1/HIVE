@@ -1,7 +1,8 @@
 import { formatNumber, formatUsd } from '../../domain/format';
 import { receiptShortage } from '../../engine/receiving';
+import { getScenario } from '../../engine/scenarios';
 import type { DemoState } from '../../store/demoState';
-import { eventSourceLabel } from '../../store/selectors';
+import { COUNT_SCENARIO_ID, DEMO_EVENT_ID, eventSourceLabel } from '../../store/selectors';
 import type { Actions } from '../actions';
 
 const time = (iso: string) => iso.slice(11, 19);
@@ -15,6 +16,14 @@ export default function RfidPanel({ state, actions }: { state: DemoState; action
   const total = po?.boxes.length ?? 0;
   const shortage = po ? receiptShortage(state, po) : null;
   const unique = new Set(state.events.filter((e) => e.purchaseOrderId === po?.id).map((e) => e.epc)).size;
+  const countEvents = getScenario(COUNT_SCENARIO_ID).events;
+  const countDone = countEvents.filter((e) => state.events.some((x) => x.id === e.id));
+  const counting = state.ui.playback === COUNT_SCENARIO_ID;
+  const outOfPlace = countDone.filter((e) => {
+    const u = state.units.find((x) => x.id === e.unitId);
+    return u && u.expectedLocationId !== e.locationHintId;
+  });
+  const countFinished = countDone.length === countEvents.length || (state.events.some((e) => e.id === DEMO_EVENT_ID) && !counting && countDone.length > 1);
 
   return (
     <div data-testid="rfid-panel">
@@ -56,13 +65,39 @@ export default function RfidPanel({ state, actions }: { state: DemoState; action
         </article>
       )}
 
+      <article className="card" data-testid="count-card">
+        <div className="rec-head">
+          <span className="eyebrow">Conteo cíclico · pasillo 4</span>
+          <span className="pill">{countFinished ? 'TERMINADO' : counting ? 'RECORRIENDO…' : 'PENDIENTE'}</span>
+        </div>
+        <div className="rec-title">Lector de mano RFID</div>
+        <div className="small muted">El operario recorre el pasillo y lee todas las etiquetas a su alcance, sin bajar las cajas.</div>
+        <div className="feed-head">
+          <div className="counter">{countDone.length}<small> / {countEvents.length} etiquetas</small></div>
+          <div className="progress" aria-hidden><span style={{ width: `${(countDone.length / countEvents.length) * 100}%` }} /></div>
+        </div>
+        {!countFinished && (
+          <div className="rec-actions">
+            <button type="button" className="btn btn-primary" onClick={actions.runDemoEvent} disabled={counting || state.ui.playback !== null}>
+              {counting ? 'Leyendo…' : '▶ Recorrer pasillo 4'}
+            </button>
+            <button type="button" className="btn" onClick={actions.completeCount}>Completar conteo</button>
+          </div>
+        )}
+        {countFinished && (outOfPlace.length > 0 ? (
+          <div className="result-box bad" data-testid="count-result">
+            {countDone.length - outOfPlace.length} de {countDone.length} en su ubicación · {outOfPlace.length} leída fuera de lugar ({outOfPlace.map((e) => e.unitId).join(', ')})
+          </div>
+        ) : <div className="result-box ok" data-testid="count-result">Todas las etiquetas en su ubicación.</div>)}
+      </article>
+
       <h3>Lecturas ({formatNumber(state.events.length)})</h3>
       {reads.length === 0 ? <p className="muted small">Aún no hay lecturas en esta sesión.</p> : (
         <ul className="feed" aria-label="Lecturas RFID">
           {reads.slice(0, 40).map((e, i) => {
             const dup = e.type === 'RECEIPT_READ' && state.events.findIndex((x) => x.epc === e.epc) !== state.events.indexOf(e);
             return (
-              <li key={e.id} className={i === 0 && playing ? 'is-new' : undefined}>
+              <li key={e.id} className={i === 0 && state.ui.playback ? 'is-new' : undefined}>
                 <span className="small">{time(e.capturedAt)}</span>
                 <span>
                   <strong>{e.unitId}</strong> · {eventSourceLabel(e)}

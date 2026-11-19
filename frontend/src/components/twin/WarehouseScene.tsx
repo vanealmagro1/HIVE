@@ -300,6 +300,41 @@ function ProjectionHook({ footprint }: { footprint: Map<string, { p: Vec3; h: nu
   return null;
 }
 
+/** Operario con lector de mano: camina por el pasillo hasta la última etiqueta leída y emite un pulso. */
+function HandheldOperator({ target, readKey }: { target: Vec3; readKey: string }) {
+  const group = useRef<THREE.Group>(null);
+  const ring = useRef<THREE.Mesh>(null);
+  const ringMat = useRef<THREE.MeshBasicMaterial>(null);
+  const goal = useMemo(() => new THREE.Vector3(...target), [target]);
+  const pulse = useRef(0);
+  useEffect(() => { pulse.current = 0; }, [readKey]);
+  useFrame((_, dt) => {
+    if (group.current) {
+      if (group.current.position.lengthSq() === 0) group.current.position.copy(goal);
+      group.current.position.lerp(goal, Math.min(1, dt * 6));
+    }
+    pulse.current += dt;
+    const k = Math.min(1, pulse.current / 0.6);
+    if (ring.current) ring.current.scale.setScalar(0.4 + k * 2.2);
+    if (ringMat.current) ringMat.current.opacity = 0.6 * (1 - k);
+  });
+  return (
+    <group ref={group}>
+      <mesh position={[0, 0.55, 0]}><cylinderGeometry args={[0.22, 0.26, 1.1, 16]} /><meshStandardMaterial color="#267c71" /></mesh>
+      <mesh position={[0, 1.3, 0]}><sphereGeometry args={[0.2, 16, 16]} /><meshStandardMaterial color="#f0c9a0" /></mesh>
+      <mesh position={[0, 1.42, 0]}><cylinderGeometry args={[0.22, 0.22, 0.08, 16]} /><meshStandardMaterial color="#e3b23c" /></mesh>
+      <mesh position={[0.28, 0.85, 0.12]}><boxGeometry args={[0.1, 0.22, 0.06]} /><meshStandardMaterial color="#143c40" /></mesh>
+      <mesh ref={ring} position={[0, 0.9, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.5, 0.03, 8, 32]} />
+        <meshBasicMaterial ref={ringMat} color="#83aa48" transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <Html position={[0, 2.0, 0]} center pointerEvents="none" zIndexRange={[14, 5]}>
+        <div className="label3d-operator">Lector de mano</div>
+      </Html>
+    </group>
+  );
+}
+
 function CameraReset({ request }: { request: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update(): void } | null;
@@ -333,6 +368,16 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest }: Sce
   const po = state.purchaseOrders[0];
   const missing = po ? po.boxes.length - po.receivedBoxIds.length : 0;
   const dockPos = po ? locPos.get(po.dockLocationId) : undefined;
+  // Operario: se ubica en el pasillo de la última lectura del lector de mano, a la altura de esa bahía.
+  const lastHandheld = [...state.events].reverse().find((e) => e.channel === 'RFID_HANDHELD' && e.locationHintId);
+  const operator = useMemo((): Vec3 | null => {
+    if (!lastHandheld?.locationHintId) return null;
+    const loc = state.locations.find((l) => l.id === lastHandheld.locationHintId);
+    const rack = state.racks.find((r) => r.id === loc?.rackId);
+    const aisle = aisles.find((a) => a.aisle === rack?.aisle);
+    const p = locPos.get(lastHandheld.locationHintId);
+    return aisle && p ? [aisle.x, 0, p[2]] : null;
+  }, [lastHandheld?.id, aisles, locPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Unidades leídas en una ubicación distinta de la registrada (evidencia, no traslado confirmado).
   const ghosts = state.units.filter((u) => !u.parentId && u.observedLocationId && u.observedLocationId !== u.expectedLocationId);
@@ -440,6 +485,7 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest }: Sce
         minAzimuthAngle={-1.1}
         maxAzimuthAngle={1.1}
       />
+      {operator && lastHandheld && <HandheldOperator target={operator} readKey={lastHandheld.id} />}
       <CameraReset request={resetViewRequest} />
       <ProjectionHook footprint={units.footprint} />
     </>

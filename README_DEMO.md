@@ -1,6 +1,6 @@
 # HIVE — Demo local de 90 segundos (Windows 11)
 
-> **ENTORNO DE SIMULACIÓN · DATOS SINTÉTICOS.** Esta demo no usa RFID UHF ni BLE reales, no tiene backend
+> **ENTORNO DE SIMULACIÓN · DATOS SINTÉTICOS.** Las lecturas RFID (portal del andén y lector de mano) son simuladas; los equipos reales y los beacons BLE se conectarán por `src/ingest`. No hay backend
 > ni base de datos, y sus cifras son ficticias. Ver `STATUS_DEMO.md` para el detalle de lo implementado.
 
 ## Requisitos
@@ -41,7 +41,7 @@ React (StrictMode) muestra avisos en consola por las etiquetas 3D, que no aparec
 
 ```powershell
 npm run dev        # servidor de desarrollo con recarga: http://127.0.0.1:5173/
-npm test           # 42 pruebas automáticas (Vitest): cálculos, eventos, idempotencia, reset y UI
+npm test           # 55 pruebas automáticas (Vitest): datos, recepción RFID, conteo, cálculos, reset y UI
 npm run build      # verificación de tipos (tsc) + build de producción en frontend/dist
 npm run preview    # sirve el último build en http://127.0.0.1:4173/
 ```
@@ -91,8 +91,9 @@ Resultados de la última ejecución: `docs/evidencia/recorrido_navegador.txt` y 
 ```
 frontend/src/
   domain/      tipos canónicos, fechas, formato, agregación de inventario (sin doble conteo)
-  seed/        semilla determinista (3 zonas, 6 racks, 18 ubicaciones, 8 pallets, 16 cajas, 3 SKU)
-  engine/      eventProcessor (conciliación, idempotencia) y scenarios (eventos SIMULATED)
+  seed/        generador determinista: bodega de papelería y tecnología (6 pasillos, ~13.600 u, 247 SKU) y OC de recepción
+  engine/      ingesta única, conciliación (eventProcessor), recepción RFID (receiving) y escenarios simulados
+  ingest/      fuentes de lecturas (ReadSource): simulada hoy; portal/lector real y beacons BLE después
   analytics/   cálculos explicables y recomendaciones
   store/       estado único, reducer, store y selectores
   api/         demoApi: contrato equivalente a la API REST propuesta (en memoria, sin servidor)

@@ -1,21 +1,44 @@
 // Distribución de la pantalla (una sola idea por zona):
-//   arriba   → marca, banner de simulación, fecha de referencia y reinicio
-//   centro   → la bodega (3D o 2D), siempre visible
-//   derecha  → panel de detalle con pestañas: Pallet · Inventario · Alertas · Predicciones
-//   abajo    → el recorrido de la demo: 5 pasos en orden + qué hacer ahora
+//   arriba    → marca, banner de simulación, fecha de referencia y reinicio
+//   franja    → indicadores de la bodega (cambian en vivo con las lecturas RFID)
+//   centro    → la bodega (3D o 2D), siempre visible
+//   derecha   → panel con pestañas: RFID · Detalle · Inventario · Alertas · Predicción · Resultados
+//   abajo     → el recorrido de la demo en 4 fases: Detectar · Priorizar · Actuar · Medir
 import { useMemo } from 'react';
-import { createActions } from './components/actions';
+import { createActions, type ActionOptions } from './components/actions';
 import AlertsPanel from './components/panels/AlertsPanel';
 import AnalyticsPanel from './components/panels/AnalyticsPanel';
-import RfidPanel from './components/panels/RfidPanel';
 import InventoryPanel from './components/panels/InventoryPanel';
+import MeasurePanel from './components/panels/MeasurePanel';
+import RfidPanel from './components/panels/RfidPanel';
 import UnitPanel from './components/panels/UnitPanel';
 import TwinView from './components/twin/TwinView';
 import { SIMULATION_BANNER } from './domain/constants';
 import { formatNumber, formatUsd } from './domain/format';
 import { inventoryTotals, type DemoState, type View } from './store/demoState';
 import { demoStore, useDemoState, type DemoStore } from './store/demoStore';
-import { alertStory, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, demoSteps, nextDemoStep, type DemoStepId } from './store/selectors';
+import { alertStory, DEMO_EVENT_ID, demoSteps, nextDemoStep, type DemoPhase, type DemoStepId } from './store/selectors';
+
+const TABS: { view: View; label: string }[] = [
+  { view: 'rfid', label: 'RFID' },
+  { view: 'twin', label: 'Detalle' },
+  { view: 'inventory', label: 'Inventario' },
+  { view: 'alerts', label: 'Alertas' },
+  { view: 'analytics', label: 'Predicción' },
+  { view: 'measure', label: 'Resultados' },
+];
+
+const STEP_HINT: Record<DemoStepId, string> = {
+  receive: 'Llega el camión con la OC-2026-1187 (12 cajas). El portal RFID del andén las lee al pasar y HIVE las compara con la orden.',
+  count: 'Un operario recorre el pasillo 4 con el lector de mano RFID. HIVE compara cada etiqueta con su ubicación registrada.',
+  alert: 'Dos hallazgos: falta 1 caja en la recepción y un pallet de mochilas está en otro pasillo. Cada alerta dice qué hacer.',
+  analytics: 'Mochilas: stock para 60 días frente a un objetivo de 30 → USD 2.400 en riesgo. HIVE ordena por dinero.',
+  approve: 'Una persona aprueba: se crean tareas para reclamar el faltante y revisar el stock. El inventario no cambia solo.',
+  measure: 'Resultados de la sesión: lecturas, cajas conciliadas, exactitud del pasillo y valor en revisión.',
+  done: 'Recorrido completo. Pulse “Reiniciar demo” para repetirlo.',
+};
+
+const PHASES: DemoPhase[] = ['Detectar', 'Priorizar', 'Actuar', 'Medir'];
 
 function Kpis({ state }: { state: DemoState }) {
   const totals = inventoryTotals(state);
@@ -35,39 +58,23 @@ function Kpis({ state }: { state: DemoState }) {
   );
 }
 
-const TABS: { view: View; label: string }[] = [
-  { view: 'rfid', label: 'RFID' },
-  { view: 'twin', label: 'Detalle' },
-  { view: 'inventory', label: 'Inventario' },
-  { view: 'alerts', label: 'Alertas' },
-  { view: 'analytics', label: 'Predicciones' },
-];
-
-const STEP_HINT: Record<DemoStepId, string> = {
-  select: 'Seleccione el pallet de mochilas PAL-001 (Zona A · pasillo 2) con un clic en la bodega o con el paso 1.',
-  event: 'Un lector RFID (simulado) detecta PAL-001 en el pasillo 4. HIVE lo registra como lectura, no como traslado.',
-  alert: 'HIVE compara lo esperado con la evidencia y crea una alerta que requiere verificación humana.',
-  analytics: 'Mochilas: stock para 60 días frente a un objetivo de 30. HIVE calcula el dinero en riesgo.',
-  approve: 'Al aprobar se crea una tarea para el equipo. El inventario no cambia.',
-  done: 'Recorrido completo. Pulse “Reiniciar demo” para repetirlo.',
-};
-
-export default function App({ store = demoStore }: { store?: DemoStore }) {
+export default function App({ store = demoStore, playback }: { store?: DemoStore; playback?: ActionOptions }) {
   const state = useDemoState(store);
-  const actions = useMemo(() => createActions(store), [store]);
+  const actions = useMemo(() => createActions(store, playback), [store, playback]);
   const steps = demoSteps(state);
   const next = nextDemoStep(state);
   const openAlerts = state.alerts.filter((a) => a.status !== 'RESOLVED').length;
   const eventDone = state.events.some((e) => e.id === DEMO_EVENT_ID);
-  const recStatus = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status;
+  const playing = state.ui.playback !== null;
   const doneCount = steps.filter((s) => s.done).length;
 
   const stepAction: Record<Exclude<DemoStepId, 'done'>, { run: () => void; disabled: boolean }> = {
-    select: { run: actions.selectDemoUnit, disabled: false },
-    event: { run: actions.runDemoEvent, disabled: eventDone },
-    alert: { run: () => actions.setView('alerts'), disabled: !eventDone },
+    receive: { run: actions.startReception, disabled: steps[0].done || playing },
+    count: { run: actions.runDemoEvent, disabled: eventDone || playing },
+    alert: { run: () => actions.setView('alerts'), disabled: !steps[1].done },
     analytics: { run: actions.openAnalytics, disabled: false },
-    approve: { run: actions.approveDemoRecommendation, disabled: recStatus !== 'PROPOSED' },
+    approve: { run: actions.approveDemoRecommendation, disabled: steps[4].done },
+    measure: { run: actions.openMeasure, disabled: false },
   };
 
   return (
@@ -75,7 +82,7 @@ export default function App({ store = demoStore }: { store?: DemoStore }) {
       <header className="topbar">
         <div className="brand">
           <span className="logo" aria-hidden>⬡</span> HIVE
-          <span className="brand-sub">Inteligencia operativa de inventarios</span>
+          <span className="brand-sub">De los datos de tu bodega a mejores decisiones</span>
         </div>
         <div className="sim-banner" role="status" data-testid="sim-banner">{SIMULATION_BANNER}</div>
         <div className="refdate">Fecha de referencia: <strong>{state.referenceDate}</strong></div>
@@ -110,34 +117,40 @@ export default function App({ store = demoStore }: { store?: DemoStore }) {
           {state.ui.view === 'inventory' && <InventoryPanel state={state} actions={actions} />}
           {state.ui.view === 'alerts' && <AlertsPanel state={state} actions={actions} />}
           {state.ui.view === 'analytics' && <AnalyticsPanel state={state} actions={actions} />}
+          {state.ui.view === 'measure' && <MeasurePanel state={state} />}
         </div>
       </aside>
 
       <footer className="controlbar" aria-label="Recorrido de la demo">
         <div className="guide">
           <span className="guide-progress">{next === 'done' ? 'Completado' : `Paso ${doneCount + 1} de ${steps.length}`}</span>
-          <span className="guide-hint">{STEP_HINT[next]}</span>
+          <span className="guide-hint">{playing ? 'Leyendo etiquetas RFID…' : STEP_HINT[next]}</span>
         </div>
         <div className="stepper-row">
-          <ol className="stepper">
-            {steps.map((s, i) => {
-              const a = stepAction[s.id as Exclude<DemoStepId, 'done'>];
-              const cls = s.done ? 'is-done' : s.id === next ? 'is-next' : '';
-              return (
-                <li key={s.id}>
-                  <button type="button" className={`step ${cls}`} onClick={a.run} disabled={a.disabled}>
-                    <span className="step-dot" aria-hidden>{s.done ? '✔' : i + 1}</span>
-                    {i + 1} · {s.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          <div className="phases">
+            {PHASES.map((phase) => (
+              <div key={phase} className="phase" style={{ flex: steps.filter((s) => s.phase === phase).length }}>
+                <div className="phase-name">{phase}</div>
+                <div className="phase-steps">
+                  {steps.map((s, i) => ({ s, i })).filter(({ s }) => s.phase === phase).map(({ s, i }) => {
+                    const a = stepAction[s.id as Exclude<DemoStepId, 'done'>];
+                    const cls = s.done ? 'is-done' : s.id === next ? 'is-next' : '';
+                    return (
+                      <button key={s.id} type="button" className={`step ${cls}`} onClick={a.run} disabled={a.disabled}>
+                        <span className="step-dot" aria-hidden>{s.done ? '✔' : i + 1}</span>
+                        {i + 1} · {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
           <div className="stepper-extra">
-            <button type="button" className="btn btn-ghost" onClick={actions.replayDemoEvent} disabled={!eventDone} title="Reenvía evt-demo-001 para comprobar idempotencia">
-              Reenviar evento
+            <button type="button" className="btn btn-ghost" onClick={actions.replayDemoEvent} disabled={!eventDone || playing} title="Reenvía la lectura evt-demo-001 para comprobar idempotencia">
+              Reenviar lectura
             </button>
-            <button type="button" className="btn btn-next" onClick={actions.nextStep} disabled={next === 'done'}>
+            <button type="button" className="btn btn-next" onClick={actions.nextStep} disabled={next === 'done' || playing}>
               Siguiente paso ▶
             </button>
           </div>

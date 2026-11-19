@@ -1,7 +1,8 @@
 // Recorrido real en navegador (Chrome headless con WebGL por software) y capturas.
+// Uso: node verify-browser.mjs http://127.0.0.1:4173/ <carpeta-de-salida>
 import { chromium } from 'playwright-core';
 
-const url = process.argv[2] ?? 'http://127.0.0.1:5173/';
+const url = process.argv[2] ?? 'http://127.0.0.1:4173/';
 const out = process.argv[3] ?? '.';
 const browser = await chromium.launch({
   channel: 'chrome',
@@ -12,68 +13,73 @@ const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+const step = (name) => page.getByRole('button', { name });
+const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
+
 const t0 = Date.now();
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 20000 });
 await page.waitForTimeout(1500);
-const has2D = await page.locator('[data-testid="warehouse-2d"]').count();
-console.log('canvas:', await page.locator('canvas').count(), '2D fallback:', has2D, 'load ms:', Date.now() - t0);
-await page.screenshot({ path: `${out}/01_bodega.png` });
+console.log('canvas:', await page.locator('canvas').count(), '| 2D:', await page.locator('[data-testid="warehouse-2d"]').count(), '| carga ms:', Date.now() - t0);
+console.log('unidades iniciales:', await page.locator('[data-testid="kpi-units"]').textContent());
+await shot('01_bodega');
 
-// Recepción RFID en vivo por el portal del andén (simulada).
-await page.getByRole('tab', { name: /RFID/ }).click();
-await page.getByRole('button', { name: /Pasar pallet por el portal/ }).click();
+// 1 · Detectar: recepción RFID en vivo por el portal del andén.
+await step(/1 · Recibir camión/).click();
 await page.waitForTimeout(2600);
-await page.screenshot({ path: `${out}/01b_recepcion_en_curso.png` });
+await shot('02_recepcion_en_curso');
 await page.waitForSelector('[data-testid="receipt-result"]', { timeout: 20000 });
-console.log('recepción:', (await page.locator('[data-testid="receipt-result"]').textContent()).trim());
 await page.waitForTimeout(600);
-await page.screenshot({ path: `${out}/01c_recepcion_cerrada.png` });
+console.log('recepción:', (await page.locator('[data-testid="receipt-result"]').textContent()).trim());
+console.log('unidades tras recepción:', await page.locator('[data-testid="kpi-units"]').textContent());
+await shot('03_recepcion_cerrada');
 
-// Clic REAL sobre el pallet en la escena 3D (coordenadas de pantalla proyectadas desde la escena).
-const pt = await page.evaluate(() => window.__hiveProject?.('PAL-001'));
-await page.mouse.move(pt.x, pt.y);
-await page.waitForTimeout(400);
-await page.mouse.click(pt.x, pt.y);
-await page.waitForTimeout(1200);
-const selectedByClick = await page.locator('[data-testid="unit-panel"]').count();
-console.log('selección por clic 3D abre ficha:', selectedByClick === 1,
-  selectedByClick ? (await page.locator('[data-testid="unit-panel"] h2').textContent()) : '');
-if (!selectedByClick) await page.getByRole('button', { name: /1 · Seleccionar PAL-001/ }).click();
+// 2 · Detectar: conteo del pasillo 4 con lector de mano.
+await step(/2 · Contar pasillo 4/).click();
+await page.waitForTimeout(2200);
+await shot('04_conteo_en_curso');
+await page.waitForSelector('[data-testid="alert-alert-demo-001"]', { timeout: 20000 });
 await page.waitForTimeout(800);
-await page.screenshot({ path: `${out}/02_pal001.png` });
+console.log('alertas:', await page.locator('[data-testid^="alert-alert"]').count(), '| marcador 3D "leído aquí":', await page.locator('.label3d-ghost').count());
+await shot('05_alertas');
 
-await page.getByRole('button', { name: /2 · Ejecutar evento simulado/ }).click();
-await page.waitForTimeout(1200);
-console.log('alerta:', await page.locator('[data-testid="alert-alert-demo-001"] .prio').textContent());
-console.log('ghost 3D:', await page.locator('.label3d-ghost').count());
-await page.screenshot({ path: `${out}/03_evento_alerta.png` });
-
-await page.getByRole('button', { name: /Reenviar evento/ }).click();
+await step(/Reenviar lectura/).click();
 await page.waitForTimeout(300);
 console.log('reenvío:', await page.locator('[data-testid="last-message"]').textContent(), '| alertas:', await page.locator('[data-testid^="alert-alert"]').count());
 
-await page.getByRole('button', { name: /3 · Revisar alerta/ }).click();
+// Clic REAL sobre un pallet en la escena 3D (coordenadas proyectadas desde la escena).
+const pt = await page.evaluate(() => window.__hiveProject?.('PAL-002'));
+await page.mouse.move(pt.x, pt.y);
 await page.waitForTimeout(300);
-await page.getByRole('button', { name: /4 · Ver predicción/ }).click();
+await page.mouse.click(pt.x, pt.y);
+await page.waitForTimeout(800);
+console.log('clic 3D abre ficha:', (await page.locator('[data-testid="unit-panel"] h2').textContent().catch(() => '—')));
+await shot('06_ficha_3d');
+
+// 3-4 · Priorizar
+await step(/4 · Ver predicción/).click();
 await page.waitForTimeout(600);
 console.log('MOC-001:', (await page.locator('[data-testid="analytics-MOC-001"] .metrics').textContent()));
-await page.screenshot({ path: `${out}/04_prediccion.png` });
+await shot('07_prediccion');
 
-await page.getByRole('button', { name: /5 · Aprobar recomendación/ }).click();
-await page.waitForTimeout(500);
-console.log('tarea:', await page.locator('[data-testid="task-task-rec-moc-001"]').count());
-await page.screenshot({ path: `${out}/05_tarea.png` });
+// 5 · Actuar
+await step(/5 · Aprobar acciones/).click();
+await page.waitForTimeout(600);
+console.log('tareas:', await page.locator('[data-testid^="task-"]').count());
+await shot('08_tareas');
 
-await page.getByRole('button', { name: /Reiniciar demo/ }).click();
+// 6 · Medir
+await step(/6 · Ver resultados/).click();
+await page.waitForTimeout(600);
+await shot('09_resultados');
+
+await step(/Reiniciar demo/).click();
 await page.waitForTimeout(800);
-console.log('tras reset, ghosts:', await page.locator('.label3d-ghost').count(), 'msg:', await page.locator('[data-testid="last-message"]').textContent());
-await page.screenshot({ path: `${out}/06_reset.png` });
+console.log('tras reset: unidades', await page.locator('[data-testid="kpi-units"]').textContent(), '| marcadores:', await page.locator('.label3d-ghost').count());
 
-// Fallback 2D manual
-await page.getByRole('button', { name: 'Vista 2D' }).click();
+await step('Vista 2D').click();
 await page.waitForTimeout(400);
-await page.screenshot({ path: `${out}/07_vista2d.png` });
+await shot('10_vista2d');
 console.log('2D activo:', await page.locator('[data-testid="warehouse-2d"]').count());
 console.log('errores/avisos de consola:', errors.length ? errors : 'ninguno');
 await browser.close();

@@ -38,19 +38,24 @@ describe('layout del gemelo (derivado del estado)', () => {
   });
 });
 
-describe('recorrido guiado derivado del estado', () => {
-  it('avanza select -> event -> alert -> analytics -> approve -> done', () => {
+describe('recorrido guiado derivado del estado (Detectar · Priorizar · Actuar · Medir)', () => {
+  it('avanza receive -> count -> alert -> analytics -> approve -> measure -> done', () => {
     let s = createInitialState();
-    expect(nextDemoStep(s)).toBe('select');
-    s = demoReducer(s, { type: 'SELECT_UNIT', unitId: 'PAL-001' });
-    expect(nextDemoStep(s)).toBe('event');
-    s = demoReducer(s, { type: 'RUN_SCENARIO', scenarioId: 'DEMO_MOVE_001' });
+    expect(nextDemoStep(s)).toBe('receive');
+    s = demoReducer(s, { type: 'RUN_SCENARIO', scenarioId: 'DEMO_RECEIPT_001' });
+    s = demoReducer(s, { type: 'CLOSE_RECEIPT', purchaseOrderId: 'OC-2026-1187', closedAt: '2026-11-19T08:03:00Z' });
+    expect(nextDemoStep(s)).toBe('count');
+    s = demoReducer(s, { type: 'RUN_SCENARIO', scenarioId: 'DEMO_COUNT_P4' });
     expect(nextDemoStep(s)).toBe('alert');
     s = demoReducer(s, { type: 'SET_VIEW', view: 'alerts' });
     expect(nextDemoStep(s)).toBe('analytics');
     s = demoReducer(s, { type: 'SET_VIEW', view: 'analytics' });
     expect(nextDemoStep(s)).toBe('approve');
     s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-moc-001' });
+    expect(nextDemoStep(s)).toBe('approve'); // falta aprobar o rechazar el reclamo
+    s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-claim-oc-2026-1187' });
+    expect(nextDemoStep(s)).toBe('measure');
+    s = demoReducer(s, { type: 'SET_VIEW', view: 'measure' });
     expect(nextDemoStep(s)).toBe('done');
   });
 });

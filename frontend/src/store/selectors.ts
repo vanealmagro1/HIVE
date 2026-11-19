@@ -118,24 +118,34 @@ export function unitsWithOpenAlerts(state: DemoState): Set<string> {
   return new Set(state.alerts.filter((a) => a.status !== 'RESOLVED' && a.unitId).map((a) => a.unitId!));
 }
 
-export type DemoStepId = 'select' | 'event' | 'alert' | 'analytics' | 'approve' | 'done';
+export const RECEIPT_SCENARIO_ID = 'DEMO_RECEIPT_001';
+export const COUNT_SCENARIO_ID = 'DEMO_COUNT_P4';
+export const CLAIM_RECOMMENDATION_ID = 'rec-claim-oc-2026-1187';
 
-export interface DemoStep { id: DemoStepId; label: string; done: boolean }
+export type DemoStepId = 'receive' | 'count' | 'alert' | 'analytics' | 'approve' | 'measure' | 'done';
+export type DemoPhase = 'Detectar' | 'Priorizar' | 'Actuar' | 'Medir';
 
-/** Recorrido guiado de 90 s derivado exclusivamente del estado (sin temporizadores). */
+export interface DemoStep { id: DemoStepId; label: string; phase: DemoPhase; done: boolean }
+
+/** Recorrido guiado de 90 s derivado exclusivamente del estado (sin temporizadores propios). */
 export function demoSteps(state: DemoState): DemoStep[] {
-  const selected = state.ui.selectedUnitId === DEMO_UNIT_ID || state.events.some((e) => e.id === DEMO_EVENT_ID);
-  const eventDone = state.events.some((e) => e.id === DEMO_EVENT_ID);
-  const rec = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID);
-  const approved = rec?.status === 'APPROVED';
-  const alertSeen = eventDone && (state.ui.view === 'alerts' || state.ui.view === 'analytics' || approved);
-  const analyticsSeen = state.ui.view === 'analytics' || approved;
+  const received = state.purchaseOrders.every((p) => p.status === 'CLOSED');
+  const counted = state.events.some((e) => e.id === DEMO_EVENT_ID) && state.ui.playback !== COUNT_SCENARIO_ID;
+  const recs = [DEMO_RECOMMENDATION_ID, CLAIM_RECOMMENDATION_ID]
+    .map((id) => state.recommendations.find((r) => r.id === id)).filter((r) => r !== undefined);
+  const approved = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status === 'APPROVED'
+    && recs.every((r) => r.status !== 'PROPOSED');
+  const later = (v: string) => ['alerts', 'analytics', 'measure'].includes(v);
+  const alertSeen = counted && (later(state.ui.view) || approved);
+  const analyticsSeen = alertSeen && (state.ui.view === 'analytics' || state.ui.view === 'measure' || approved);
+  const measured = approved && state.ui.view === 'measure';
   return [
-    { id: 'select', label: 'Seleccionar PAL-001', done: selected },
-    { id: 'event', label: 'Ejecutar evento simulado', done: eventDone },
-    { id: 'alert', label: 'Revisar alerta', done: alertSeen },
-    { id: 'analytics', label: 'Ver predicción', done: analyticsSeen },
-    { id: 'approve', label: 'Aprobar recomendación', done: approved },
+    { id: 'receive', label: 'Recibir camión', phase: 'Detectar', done: received },
+    { id: 'count', label: 'Contar pasillo 4', phase: 'Detectar', done: counted },
+    { id: 'alert', label: 'Revisar alertas', phase: 'Priorizar', done: alertSeen },
+    { id: 'analytics', label: 'Ver predicción', phase: 'Priorizar', done: analyticsSeen },
+    { id: 'approve', label: 'Aprobar acciones', phase: 'Actuar', done: approved },
+    { id: 'measure', label: 'Ver resultados', phase: 'Medir', done: measured },
   ];
 }
 

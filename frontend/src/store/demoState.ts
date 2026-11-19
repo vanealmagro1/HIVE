@@ -8,7 +8,7 @@ import type {
 } from '../domain/types';
 import { createSeed } from '../seed/seed';
 
-export type View = 'twin' | 'rfid' | 'inventory' | 'alerts' | 'analytics';
+export type View = 'twin' | 'rfid' | 'inventory' | 'alerts' | 'analytics' | 'measure';
 
 export interface AuditEntry { seq: number; message: string }
 

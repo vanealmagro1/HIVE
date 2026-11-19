@@ -1,21 +1,47 @@
 // Acciones de UI: todas pasan por el contrato demoApi o el store único (nada de estado paralelo).
+// Las lecturas "en vivo" se reproducen con una fuente simulada (ingest/readSource) que entrega cada
+// evento a demoApi.postEvent: el mismo camino que usarán el portal, el lector de mano y los beacons reales.
 import { createDemoApi } from '../api/demoApi';
-import { getScenario, DEMO_SCENARIO_ID, RECEIPT_CLOSE_TIME } from '../engine/scenarios';
+import { DEMO_SCENARIO_ID, getScenario, RECEIPT_CLOSE_TIME } from '../engine/scenarios';
 import { SimulatedRfidSource } from '../ingest/readSource';
 import { DEMO_PO_ID } from '../seed/seed';
 import type { View } from '../store/demoState';
 import type { DemoStore } from '../store/demoStore';
-import { DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, nextDemoStep } from '../store/selectors';
+import { CLAIM_RECOMMENDATION_ID, COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, nextDemoStep, RECEIPT_SCENARIO_ID } from '../store/selectors';
 
-export function createActions(store: DemoStore) {
+export interface ActionOptions {
+  /** Milisegundos entre lecturas simuladas (por defecto: ritmo visible para una presentación). */
+  receiptIntervalMs?: number;
+  countIntervalMs?: number;
+}
+
+export function createActions(store: DemoStore, options: ActionOptions = {}) {
   const api = createDemoApi(store);
-  const demoEvent = getScenario(DEMO_SCENARIO_ID).events[0];
-  const receiptReads = getScenario('DEMO_RECEIPT_001').events;
+  const demoEvent = getScenario(DEMO_SCENARIO_ID).events.find((e) => e.id === DEMO_EVENT_ID)!;
+  const receiptReads = getScenario(RECEIPT_SCENARIO_ID).events;
+  const countReads = getScenario(COUNT_SCENARIO_ID).events;
   let source: SimulatedRfidSource | null = null;
+
+  const processed = (id: string) => store.getState().events.some((e) => e.id === id);
+  const po = () => store.getState().purchaseOrders.find((p) => p.id === DEMO_PO_ID);
+
   const finishReception = () => {
     api.closeReceipt(DEMO_PO_ID, RECEIPT_CLOSE_TIME);
     store.dispatch({ type: 'SET_PLAYBACK', scenarioId: null });
   };
+  const finishCount = () => {
+    store.dispatch({ type: 'SET_PLAYBACK', scenarioId: null });
+    store.dispatch({ type: 'SELECT_UNIT', unitId: DEMO_UNIT_ID });
+    actions.setView('alerts');
+  };
+  /** Reproduce un escenario lectura por lectura (solo visualización: el resultado es el mismo que procesarlo de una vez). */
+  const play = (scenarioId: string, events: typeof receiptReads, intervalMs: number, onDone: () => void) => {
+    source?.stop();
+    store.dispatch({ type: 'SET_PLAYBACK', scenarioId });
+    source = new SimulatedRfidSource(`sim-${scenarioId}`, events.filter((e) => !processed(e.id)), intervalMs);
+    source.start((e) => { api.postEvent(e); }, onDone);
+  };
+
   const actions = {
     api,
     select: (unitId: string) => store.dispatch({ type: 'SELECT_UNIT', unitId }),
@@ -24,11 +50,36 @@ export function createActions(store: DemoStore) {
     selectFromMap: (unitId: string) => { actions.select(unitId); actions.setView('twin'); },
     setForce2D: (value: boolean) => store.dispatch({ type: 'SET_FORCE_2D', value }),
     selectDemoUnit: () => { actions.select(DEMO_UNIT_ID); actions.setView('twin'); },
-    runDemoEvent: () => {
-      api.postEvent(demoEvent);
-      store.dispatch({ type: 'SELECT_UNIT', unitId: demoEvent.unitId });
-      actions.setView('alerts');
+
+    /** Paso 1 · el camión pasa por el portal RFID del andén (lecturas en vivo) y se cierra la recepción. */
+    startReception: () => {
+      actions.setView('rfid');
+      const p = po();
+      if (!p || p.status === 'CLOSED' || source?.running) return;
+      play(RECEIPT_SCENARIO_ID, receiptReads, options.receiptIntervalMs ?? 380, finishReception);
     },
+    /** Plan B: procesa todas las lecturas de inmediato (mismo resultado, sin animación). */
+    completeReception: () => {
+      source?.stop();
+      actions.setView('rfid');
+      const p = po();
+      if (!p || p.status === 'CLOSED') return;
+      for (const e of receiptReads) if (!processed(e.id)) api.postEvent(e);
+      finishReception();
+    },
+
+    /** Paso 2 · conteo cíclico del pasillo 4 con lector de mano (lecturas en vivo). */
+    runDemoEvent: () => {
+      actions.setView('rfid');
+      if (processed(DEMO_EVENT_ID) || source?.running) return;
+      play(COUNT_SCENARIO_ID, countReads, options.countIntervalMs ?? 140, finishCount);
+    },
+    completeCount: () => {
+      source?.stop();
+      for (const e of countReads) if (!processed(e.id)) api.postEvent(e);
+      finishCount();
+    },
+    /** Reenvía la lectura clave para demostrar idempotencia (no duplica nada). */
     replayDemoEvent: () => { api.postEvent(demoEvent); },
     runScenario: (scenarioId: string) => {
       for (const e of getScenario(scenarioId).events) api.postEvent(e);
@@ -37,34 +88,25 @@ export function createActions(store: DemoStore) {
     openAnalytics: () => actions.setView('analytics'),
     approve: (recommendationId: string) => { api.approveRecommendation(recommendationId); },
     reject: (recommendationId: string) => store.dispatch({ type: 'REJECT_RECOMMENDATION', recommendationId }),
-    approveDemoRecommendation: () => { actions.setView('analytics'); api.approveRecommendation(DEMO_RECOMMENDATION_ID); },
+    /** Paso 5 · una persona aprueba: reclamo del faltante (si existe) y revisión del stock de mochilas. */
+    approveDemoRecommendation: () => {
+      actions.setView('analytics');
+      const s = store.getState();
+      for (const id of [CLAIM_RECOMMENDATION_ID, DEMO_RECOMMENDATION_ID]) {
+        if (s.recommendations.find((r) => r.id === id)?.status === 'PROPOSED') api.approveRecommendation(id);
+      }
+    },
+    openMeasure: () => actions.setView('measure'),
     setAlertInReview: (alertId: string) => store.dispatch({ type: 'SET_ALERT_STATUS', alertId, status: 'IN_REVIEW' }),
-    /** Reproduce en vivo las lecturas del portal del andén (fuente simulada) y cierra la recepción al terminar. */
-    startReception: () => {
-      const po = store.getState().purchaseOrders.find((p) => p.id === DEMO_PO_ID);
-      actions.setView('rfid');
-      if (!po || po.status === 'CLOSED' || source?.running) return;
-      store.dispatch({ type: 'SET_PLAYBACK', scenarioId: 'DEMO_RECEIPT_001' });
-      source = new SimulatedRfidSource('sim-portal-anden-1', receiptReads);
-      source.start((e) => { api.postEvent(e); }, finishReception);
-    },
-    /** Plan B: procesa todas las lecturas de inmediato (mismo resultado, sin animación). */
-    completeReception: () => {
-      source?.stop();
-      actions.setView('rfid');
-      const po = store.getState().purchaseOrders.find((p) => p.id === DEMO_PO_ID);
-      if (!po || po.status === 'CLOSED') return;
-      for (const e of receiptReads) if (!store.getState().events.some((x) => x.id === e.id)) api.postEvent(e);
-      finishReception();
-    },
-    reset: () => { source?.stop(); api.resetDemo(); },
+    reset: () => { source?.stop(); source = null; api.resetDemo(); },
     nextStep: () => {
       switch (nextDemoStep(store.getState())) {
-        case 'select': return actions.selectDemoUnit();
-        case 'event': return actions.runDemoEvent();
+        case 'receive': return actions.startReception();
+        case 'count': return actions.runDemoEvent();
         case 'alert': return actions.setView('alerts');
         case 'analytics': return actions.openAnalytics();
         case 'approve': return actions.approveDemoRecommendation();
+        case 'measure': return actions.openMeasure();
         default: return undefined;
       }
     },
