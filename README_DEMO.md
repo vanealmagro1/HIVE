@@ -41,7 +41,7 @@ React (StrictMode) muestra avisos en consola por las etiquetas 3D, que no aparec
 
 ```powershell
 npm run dev        # servidor de desarrollo con recarga: http://127.0.0.1:5173/
-npm test           # 41 pruebas automáticas (Vitest): cálculos, eventos, idempotencia, reset y UI
+npm test           # 42 pruebas automáticas (Vitest): cálculos, eventos, idempotencia, reset y UI
 npm run build      # verificación de tipos (tsc) + build de producción en frontend/dist
 npm run preview    # sirve el último build en http://127.0.0.1:4173/
 ```

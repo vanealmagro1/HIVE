@@ -17,7 +17,7 @@ Alcance: **prototipo demostrativo vertical** para la demo de 90 s del 19-11-2026
 
 | # | Requisito | Estado | Evidencia |
 |---|---|---|---|
-| 1 | Bodega 3D interactiva (racks, ubicaciones, `PAL-001` seleccionable, orbit/zoom/clic, foco, leyenda) | **Implementado** | Clic real en el canvas abre la ficha de PAL-001 (`docs/evidencia/recorrido_navegador.txt`, `02_pal001.png`) |
+| 1 | Bodega 3D interactiva (racks en una fila sin oclusión, IDs impresos en cada pallet, ficha flotante al pasar el cursor, `PAL-001` seleccionable con clic, orbit/zoom limitados, leyenda bajo la escena) | **Implementado** | Clic real en el canvas abre la ficha de PAL-001 (`docs/evidencia/recorrido_navegador.txt`, `02_pal001.png`) |
 | 2 | Inventario SKU/lote/cantidad/costo/ubicación esperada | **Implementado** | Panel Inventario; `seed.test.ts` |
 | 3 | Evento `SIMULATED` `evt-demo-001`: PAL-001 observado en LOC-B2, esperado sigue en LOC-A1 | **Implementado** | `eventProcessor.test.ts`; `03_evento_alerta.png` |
 | 4 | Discrepancia pendiente + alerta HIGH con evidencia; repetir ID no duplica | **Implementado** | Tests de idempotencia (reducer, API y UI); en navegador: reenvío → 1 alerta |
@@ -36,7 +36,7 @@ Alcance: **prototipo demostrativo vertical** para la demo de 90 s del 19-11-2026
 
 | Comando | Resultado |
 |---|---|
-| `npm test` | **6 archivos, 41 pruebas, todas pasan** (cálculos, semilla, agregación, eventos, idempotencia, ausencia de lectura, validación, recomendaciones/tareas, reset, contrato API, layout, recorrido UI completo con clics) |
+| `npm test` | **6 archivos, 42 pruebas, todas pasan** (cálculos, semilla, agregación, racks sin solape, eventos, idempotencia, ausencia de lectura, validación, recomendaciones/tareas, reset, contrato API, layout, recorrido UI completo con clics) |
 | `npm run build` | **OK** (`tsc --noEmit` sin errores + build de Vite). Bundle 3D ≈ 967 kB (257 kB gzip), carga diferida |
 | Instalación limpia (`npm ci` + test + build en una copia sin `node_modules`) | **OK** |
 | Recorrido en navegador real (Chrome headless, WebGL por software, 1366×768, build de producción) | **OK**: canvas 3D presente, clic 3D selecciona PAL-001, alerta ALTA, 1 fantasma de observación, reenvío idempotente, SKU-A 60 días/300 u/USD 2.400, 1 tarea, reset sin fantasmas, vista 2D activa. Consola: solo un aviso de deprecación de `THREE.Clock` (interno de la librería, inofensivo) |

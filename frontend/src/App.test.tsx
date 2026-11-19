@@ -41,8 +41,12 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     expect(store.getState().alerts).toHaveLength(1);
     expect(store.getState().events).toHaveLength(1);
 
-    // 3. Predicción
-    await user.click(screen.getByRole('button', { name: /3 · Ver predicción/ }));
+    // 3. Revisar alerta (pestaña Alertas)
+    await user.click(screen.getByRole('button', { name: /3 · Revisar alerta/ }));
+    expect(screen.getByRole('tab', { name: /Alertas/ }).getAttribute('aria-selected')).toBe('true');
+
+    // 4. Predicción
+    await user.click(screen.getByRole('button', { name: /4 · Ver predicción/ }));
     const a = screen.getByTestId('analytics-SKU-A');
     expect(within(a).getAllByText('60 días').length).toBeGreaterThan(0);
     expect(within(a).getByText('300 unidades')).toBeTruthy();
@@ -50,12 +54,12 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     expect(within(screen.getByTestId('analytics-SKU-B')).getAllByText('USD 720').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('analytics-SKU-C')).getByText('Sin datos suficientes para pronosticar')).toBeTruthy();
 
-    // 4. Aprobar -> una sola tarea, stock intacto
-    await user.click(screen.getByRole('button', { name: /4 · Aprobar recomendación/ }));
+    // 5. Aprobar -> una sola tarea, stock intacto
+    await user.click(screen.getByRole('button', { name: /5 · Aprobar recomendación/ }));
     expect(screen.getByTestId('task-task-rec-sku-a')).toBeTruthy();
     expect(store.getState().tasks).toHaveLength(1);
     expect(inventoryTotals(store.getState())).toEqual(stockBefore);
-    expect((screen.getByRole('button', { name: /4 · Aprobar recomendación/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /5 · Aprobar recomendación/ }) as HTMLButtonElement).disabled).toBe(true);
 
     // Reset
     await user.click(screen.getByRole('button', { name: /Reiniciar demo/ }));

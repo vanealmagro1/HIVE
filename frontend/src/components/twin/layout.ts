@@ -1,12 +1,16 @@
 // Disposición espacial de la bodega de demo, derivada de zonas/racks/ubicaciones del estado.
 // Las coordenadas son de REPRESENTACIÓN (asignadas por el sistema), no posiciones medidas.
+// Todos los racks quedan en una sola fila (eje X) para que, vistos de frente, ninguno tape a otro.
 import type { Location, Rack, Zone } from '../../domain/types';
 
 export const LEVEL_HEIGHT = 1.35;
 export const RACK_WIDTH = 2.4;
 export const RACK_DEPTH = 1.4;
-export const ZONE_SPACING = 8.5;
-export const RACK_SPACING_Z = 4.2;
+/** Separación entre centros de racks de una misma zona. */
+export const RACK_SPACING_X = 2.9;
+/** Separación entre centros de zonas. */
+export const ZONE_SPACING = 7.4;
+export const ZONE_DEPTH = 4.6;
 
 export type Vec3 = [number, number, number];
 
@@ -17,7 +21,7 @@ export function zoneLayouts(zones: Zone[]): ZoneLayout[] {
   return zones.map((zone, i) => ({
     zone,
     center: [(i - (zones.length - 1) / 2) * ZONE_SPACING, 0, 0],
-    size: [ZONE_SPACING - 1.2, RACK_SPACING_Z * 2 + 1.6],
+    size: [ZONE_SPACING - 0.6, ZONE_DEPTH],
   }));
 }
 
@@ -27,8 +31,8 @@ export function rackLayouts(zones: Zone[], racks: Rack[]): RackLayout[] {
     const zone = zl.get(rack.zoneId)!;
     const inZone = racks.filter((r) => r.zoneId === rack.zoneId);
     const idx = inZone.indexOf(rack);
-    const z = (idx - (inZone.length - 1) / 2) * RACK_SPACING_Z;
-    return { rack, position: [zone.center[0], 0, z] };
+    const x = zone.center[0] + (idx - (inZone.length - 1) / 2) * RACK_SPACING_X;
+    return { rack, position: [x, 0, 0] };
   });
 }
 

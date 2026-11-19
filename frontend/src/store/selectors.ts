@@ -62,8 +62,8 @@ export function demoSteps(state: DemoState): DemoStep[] {
   return [
     { id: 'select', label: 'Seleccionar PAL-001', done: selected },
     { id: 'event', label: 'Ejecutar evento simulado', done: eventDone },
-    { id: 'alert', label: 'Revisar discrepancia y alerta', done: alertSeen },
-    { id: 'analytics', label: 'Ver predicción SKU-A', done: analyticsSeen },
+    { id: 'alert', label: 'Revisar alerta', done: alertSeen },
+    { id: 'analytics', label: 'Ver predicción', done: analyticsSeen },
     { id: 'approve', label: 'Aprobar recomendación', done: approved },
   ];
 }

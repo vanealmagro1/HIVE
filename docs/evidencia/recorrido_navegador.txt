@@ -1,4 +1,4 @@
-canvas: 1 2D fallback: 0 load ms: 2873
+canvas: 1 2D fallback: 0 load ms: 3290
 selección por clic 3D abre ficha: true Pallet PAL-001
 alerta: ▲ PRIORIDAD ALTA
 ghost 3D: 1

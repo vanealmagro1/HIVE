@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../store/demoState';
 import { demoReducer } from '../../store/demoReducer';
 import { nextDemoStep } from '../../store/selectors';
-import { locationPositions, rackLayouts } from './layout';
+import { RACK_WIDTH, locationPositions, rackLayouts } from './layout';
 
 describe('layout del gemelo (derivado del estado)', () => {
   const s = createInitialState();
@@ -17,6 +17,11 @@ describe('layout del gemelo (derivado del estado)', () => {
     expect(pos.get('LOC-A3')![1]).toBeGreaterThan(pos.get('LOC-A1')![1]);
     const racks = rackLayouts(s.zones, s.racks);
     expect(new Set(racks.map((r) => `${r.position[0]},${r.position[2]}`)).size).toBe(6);
+  });
+
+  it('vistos de frente, ningún rack tapa a otro (fila única, sin solape en X)', () => {
+    const xs = rackLayouts(s.zones, s.racks).map((r) => r.position[0]).sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i += 1) expect(xs[i] - xs[i - 1]).toBeGreaterThan(RACK_WIDTH);
   });
 
   it('LOC-A1 (esperada) y LOC-B2 (observada) están en zonas distintas', () => {
