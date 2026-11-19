@@ -1,0 +1,12 @@
+canvas: 1 2D fallback: 0 load ms: 2873
+selección por clic 3D abre ficha: true Pallet PAL-001
+alerta: ▲ PRIORIDAD ALTA
+ghost 3D: 1
+reenvío: Evento evt-demo-001 ya procesado: reenvío ignorado (idempotente). | alertas: 1
+SKU-A: Cobertura60 díasExceso potencial300 unidadesValor potencial en riesgo (exceso)USD 2.400
+tarea: 1
+tras reset, ghosts: 0 msg: Demo reiniciada al estado semilla.
+2D activo: 1
+errores/avisos de consola: [
+  'warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.'
+]
