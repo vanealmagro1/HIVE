@@ -4,6 +4,7 @@
 import { createDemoApi } from '../api/demoApi';
 import { DEMO_SCENARIO_ID, getScenario, RECEIPT_CLOSE_TIME } from '../engine/scenarios';
 import { SimulatedRfidSource } from '../ingest/readSource';
+import { EXECUTION_START_TIME, RECEPTION_CONFIRM_TIME } from '../engine/transfers';
 import { DEMO_PO_ID } from '../seed/seed';
 import type { Section, View } from '../store/demoState';
 import type { DemoStore } from '../store/demoStore';
@@ -47,6 +48,7 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
     setView: (view: View) => store.dispatch({ type: 'SET_VIEW', view }),
     /** Clic en la bodega (3D o 2D): selecciona y muestra su ficha. */
     selectFromMap: (unitId: string) => { actions.select(unitId); actions.setView('twin'); },
+    clearSelection: () => store.dispatch({ type: 'SELECT_UNIT', unitId: null }),
     setForce2D: (value: boolean) => store.dispatch({ type: 'SET_FORCE_2D', value }),
     selectDemoUnit: () => { actions.select(DEMO_UNIT_ID); actions.setView('twin'); },
 
@@ -91,9 +93,31 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
       }
     },
     openMeasure: () => actions.setView('measure'),
+    /** Producto en foco (compartido por gemelo, gráficas y recomendaciones). */
+    setSku: (skuId: string) => store.dispatch({ type: 'SET_SKU', skuId }),
+    /** Abre el gemelo enfocando el primer pallet del producto. */
+    locateSku: (skuId: string) => {
+      const s = store.getState();
+      const lots = new Set(s.lots.filter((l) => l.skuId === skuId).map((l) => l.id));
+      const pallet = s.units.find((u) => u.type === 'PALLET' && u.lotId !== null && lots.has(u.lotId));
+      if (!pallet) return;
+      store.dispatch({ type: 'SET_SECTION', section: 'gemelo' });
+      store.dispatch({ type: 'FOCUS_UNIT', unitId: pallet.id });
+    },
+    focusUnit: (unitId: string) => store.dispatch({ type: 'FOCUS_UNIT', unitId }),
+    /** Paso 6 · simular la ejecución del traslado aprobado (no cambia el inventario todavía). */
+    simulateExecution: (movementId: string) => store.dispatch({ type: 'START_MOVEMENT', movementId, at: EXECUTION_START_TIME }),
+    /** Paso 6 · confirmación explícita en destino: valida la cantidad leída y actualiza el inventario simulado. */
+    confirmReception: (movementId: string, receivedQuantity?: number) => {
+      const m = store.getState().movements.find((x) => x.id === movementId);
+      if (!m) return;
+      store.dispatch({ type: 'CONFIRM_MOVEMENT', movementId, receivedQuantity: receivedQuantity ?? m.quantity, at: RECEPTION_CONFIRM_TIME });
+    },
     setSection: (section: Section) => store.dispatch({ type: 'SET_SECTION', section }),
     goStep: (step: number) => {
       store.dispatch({ type: 'SET_SECTION', section: 'resumen' });
+      // Paso 6: la tarjeta de selección taparía el recorrido hacia el muelle D2.
+      if (step === 5) store.dispatch({ type: 'SELECT_UNIT', unitId: null });
       store.dispatch({ type: 'SET_STEP', step });
     },
     nextStep: () => actions.goStep(store.getState().ui.step + 1),

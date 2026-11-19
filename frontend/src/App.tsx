@@ -12,6 +12,7 @@ import AnalyticsPanel from './components/panels/AnalyticsPanel';
 import InventoryPanel from './components/panels/InventoryPanel';
 import MeasurePanel from './components/panels/MeasurePanel';
 import RfidPanel from './components/panels/RfidPanel';
+import SkuExplorer from './components/panels/SkuExplorer';
 import UnitPanel from './components/panels/UnitPanel';
 import TwinView from './components/twin/TwinView';
 import { demoStore, useDemoState, type DemoStore } from './store/demoStore';
@@ -33,6 +34,8 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
   const actions = useMemo(() => createActions(store, playback), [store, playback]);
   const section = state.ui.section;
   const twinVisible = section === 'resumen' || section === 'gemelo';
+  // Cada sección empieza desde arriba (no hereda el scroll de la anterior).
+  useEffect(() => { document.querySelector('.content')?.scrollTo?.({ top: 0 }); }, [section]);
 
   return (
     <div className="app">
@@ -46,6 +49,7 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
               <TwinView
                 state={state}
                 onSelect={actions.selectFromMap}
+                onClear={actions.clearSelection}
                 onToggle2D={actions.setForce2D}
                 focusStep={section === 'resumen' ? state.ui.step : null}
               />
@@ -74,6 +78,7 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
           {section === 'analitica' && (
             <>
               <h1 className="section-title">Analítica</h1>
+              <SkuExplorer state={state} actions={actions} />
               <div className="section-grid">
                 <div className="card"><AnalyticsPanel state={state} actions={actions} /></div>
                 <div className="card"><MeasurePanel state={state} /></div>

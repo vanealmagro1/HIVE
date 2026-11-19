@@ -4,7 +4,7 @@ import { buildAnalyticsRecommendations } from '../analytics/recommendations';
 import { REFERENCE_DATE } from '../domain/constants';
 import { stockByLot, stockBySku } from '../domain/inventory';
 import type {
-  Alert, Discrepancy, InventoryEvent, Recommendation, SeedData, Task,
+  Alert, Discrepancy, InventoryEvent, Movement, Recommendation, SeedData, Task,
 } from '../domain/types';
 import { createSeed } from '../seed/seed';
 
@@ -22,10 +22,13 @@ export interface DemoState extends SeedData {
   alerts: Alert[];
   recommendations: Recommendation[];
   tasks: Task[];
+  /** Traslados internos generados al aprobar una redistribución (ejecución simulada). */
+  movements: Movement[];
   audit: AuditEntry[];
   /** playback: escenario cuyas lecturas se están reproduciendo en vivo (solo visualización). */
   /** step: paso del recorrido guiado (0–5); drawer: panel de detalle técnico abierto. */
-  ui: { selectedUnitId: string | null; view: View; force2D: boolean; playback: string | null; section: Section; step: number; drawer: boolean };
+  /** skuId: producto en foco, compartido por gemelo, gráficas, indicadores y recomendaciones. */
+  ui: { selectedUnitId: string | null; view: View; force2D: boolean; playback: string | null; section: Section; step: number; drawer: boolean; skuId: string | null; focusSeq: number };
   /** Último resultado de una acción, para mostrar retroalimentación (p. ej. evento duplicado). */
   lastMessage: { kind: 'info' | 'warning' | 'error'; text: string } | null;
 }
@@ -65,8 +68,9 @@ export function createInitialState(): DemoState {
     alerts: [],
     recommendations: buildAnalyticsRecommendations(computeAnalytics(base)),
     tasks: [],
+    movements: [],
     audit: [{ seq: 1, message: 'Estado semilla cargado (datos sintéticos, fecha de referencia 2026-11-19).' }],
-    ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null, section: 'resumen', step: 0, drawer: false },
+    ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null, section: 'resumen', step: 0, drawer: false, skuId: null, focusSeq: 0 },
     lastMessage: null,
   };
 }

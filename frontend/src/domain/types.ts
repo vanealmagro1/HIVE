@@ -129,16 +129,68 @@ export interface Recommendation {
   skuId: string | null;
   unitId: string | null;
   estimatedImpactUsd: number | null;
+  /** Unidades a mover (solo redistribución). */
+  quantity?: number | null;
   status: RecommendationStatus;
   assumptions: string[];
 }
+
+/** OPEN = pendiente de ejecución · IN_PROGRESS = en ejecución (simulada) · DONE = completada en simulación. */
+export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
 
 export interface Task {
   id: string;
   recommendationId: string;
   title: string;
-  status: 'OPEN' | 'DONE';
+  status: TaskStatus;
   owner: string | null;
+  skuId?: string | null;
+  quantity?: number | null;
+  createdAt?: ISODateTime;
+}
+
+/**
+ * Otra bodega de la misma empresa, fuera del gemelo 3D (solo cifras agregadas, SINTÉTICAS).
+ * La demanda diaria es el promedio de despachos a clientes de sus últimos 30 días.
+ */
+export interface RemoteSite {
+  warehouseId: string;
+  name: string;
+  /** Muelle de la bodega principal por el que salen los traslados hacia esta bodega. */
+  dockName: string;
+  stockBySku: Record<string, number>;
+  dailyDemandBySku: Record<string, number>;
+}
+
+/**
+ * Traslado interno entre bodegas. NO es venta ni despacho: el stock total de la empresa se conserva.
+ * PLANNED → IN_PROGRESS (Simular ejecución) → COMPLETED (Confirmar recepción, explícito).
+ */
+export type MovementStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED';
+
+export interface MovementSnapshot { originStock: number; destinationStock: number }
+
+export interface Movement {
+  id: string;
+  taskId: string;
+  recommendationId: string;
+  skuId: string;
+  quantity: number;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  /** Pallets completos que se trasladan y sus ubicaciones de origen. */
+  unitIds: string[];
+  originLocationIds: string[];
+  status: MovementStatus;
+  plannedAt: ISODateTime;
+  startedAt: ISODateTime | null;
+  completedAt: ISODateTime | null;
+  receivedQuantity: number | null;
+  /** Stock de origen y destino al iniciar la ejecución (para la comparación antes/después). */
+  before: MovementSnapshot | null;
+  after: MovementSnapshot | null;
+  /** Copia de las unidades trasladadas (trazabilidad: dejan el gemelo de origen al confirmarse). */
+  shippedUnits: LogisticUnit[];
 }
 
 /** Solo despachos a clientes. Las transferencias internas NO son demanda. */
@@ -182,4 +234,5 @@ export interface SeedData {
   internalTransfers: InternalTransfer[];
   policies: SkuPolicy[];
   purchaseOrders: PurchaseOrder[];
+  remoteSites: RemoteSite[];
 }

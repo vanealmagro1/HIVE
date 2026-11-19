@@ -5,6 +5,26 @@ import type { DemoState } from '../../store/demoState';
 import { describeLocation, eventSourceLabel, STATUS_LABEL, unitContents } from '../../store/selectors';
 import type { Actions } from '../actions';
 import { productIcon } from '../layout/Shell';
+import { computeAnalytics } from '../../store/demoState';
+import { CoverageBlock, DemandChart } from '../charts/SkuInsight';
+import RecommendationCard from './RecommendationCard';
+
+/** Analítica del producto seleccionado en el gemelo (mismo estado que la sección Analítica). */
+function SkuContext({ state, actions, skuId }: { state: DemoState; actions: Actions; skuId: string }) {
+  const a = computeAnalytics(state).find((x) => x.skuId === skuId);
+  if (!a) return null;
+  const recs = state.recommendations.filter((r) => r.skuId === skuId && r.type !== 'VERIFY_LOCATION');
+  return (
+    <section className="sku-context" data-testid="sku-context">
+      <div className="eyebrow">Demanda y cobertura de este producto</div>
+      <DemandChart state={state} a={a} compact />
+      <div className="note">Línea continua: despachos registrados · punteada: proyección.</div>
+      <CoverageBlock a={a} compact />
+      {recs.map((r) => <RecommendationCard key={r.id} rec={r} task={state.tasks.find((t) => t.recommendationId === r.id)} actions={actions} />)}
+      <button type="button" className="btn btn-small" onClick={() => { actions.setSku(skuId); actions.setSection('analitica'); }}>Ver analítica completa</button>
+    </section>
+  );
+}
 
 /** Ficha de una unidad: producto → SKU · cantidad → pallet → ubicación → estado. Pallets mixtos con desglose. */
 export default function UnitPanel({ state, actions }: { state: DemoState; actions: Actions }) {
@@ -75,6 +95,7 @@ export default function UnitPanel({ state, actions }: { state: DemoState; action
       {unit.parentId && (
         <p className="small">Pertenece a <button type="button" className="link-btn" onClick={() => actions.select(unit.parentId!)}>{unit.parentId}</button></p>
       )}
+      {c.kind === 'single' && c.skuId && <SkuContext state={state} actions={actions} skuId={c.skuId} />}
       {evidence.length > 0 && (
         <details>
           <summary>Lecturas ({evidence.length})</summary>

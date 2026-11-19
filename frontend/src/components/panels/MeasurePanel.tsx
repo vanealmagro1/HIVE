@@ -26,7 +26,9 @@ export function sessionMetrics(state: DemoState) {
     countMatches: count.length - countMismatch,
     findings: open.length,
     inReviewUsd: inReview,
-    tasks: state.tasks.filter((t) => t.status === 'OPEN').length,
+    tasks: state.tasks.length,
+    movedUnits: state.movements.filter((x) => x.status === 'COMPLETED').reduce((t, x) => t + (x.receivedQuantity ?? 0), 0),
+    movementsDone: state.movements.filter((x) => x.status === 'COMPLETED').length,
     approvedImpactUsd: approved.reduce((s, r) => s + (r.estimatedImpactUsd ?? 0), 0),
   };
 }
@@ -45,11 +47,12 @@ export default function MeasurePanel({ state }: { state: DemoState }) {
         <div className="metric"><div className="metric-label">Hallazgos por verificar</div><div className="metric-value">{m.findings} · {formatUsd(m.inReviewUsd)}</div></div>
         <div className="metric"><div className="metric-label">Acciones aprobadas</div><div className="metric-value">{m.tasks} tareas</div></div>
         <div className="metric"><div className="metric-label">Impacto estimado de lo aprobado</div><div className="metric-value">{formatUsd(m.approvedImpactUsd)}</div></div>
+        <div className="metric"><div className="metric-label">Traslados confirmados en destino</div><div className="metric-value">{m.movementsDone} · {formatNumber(m.movedUnits)} u</div></div>
       </div>
       <ul className="small" style={{ marginTop: 12 }}>
         <li>{formatNumber(m.reads)} lecturas RFID procesadas ({formatNumber(m.tags)} etiquetas distintas), sin digitar códigos.</li>
         <li>Conteo del pasillo D: {m.countMatches} de {m.countReads} etiquetas respondieron en su ubicación registrada.</li>
-        <li>El inventario solo cambió por lo leído en la recepción; los hallazgos esperan verificación humana.</li>
+        <li>El inventario solo cambió por lo leído en la recepción{m.movementsDone ? ' y por traslados confirmados en destino' : ''}; los hallazgos esperan verificación humana.</li>
       </ul>
       <div className="result-box ok small">
         Datos de una sesión simulada. En un piloto, estos mismos indicadores se comparan con una línea base medida

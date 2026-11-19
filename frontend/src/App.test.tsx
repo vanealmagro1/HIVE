@@ -85,18 +85,47 @@ describe('HIVE UI v1.1 · demo guiada de 6 pasos (vista 2D)', () => {
     expect(store.getState().tasks.map((t) => t.id)).toEqual(['task-rec-moc-001']);
     expect(inventoryTotals(store.getState())).toEqual(stock);
 
-    // 6 · Registrar
+    // 6 · Registrar: tarea → simular ejecución → confirmar recepción → resultado antes/después.
     await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    expect(screen.getByTestId('movement-status').textContent).toMatch(/Pendiente de ejecución · 300 u · 2 pallets/);
+    expect(screen.getByTestId('movement-route').textContent).toMatch(/B-09-01 · B-08-01/);
+    expect(screen.getByTestId('movement-route').textContent).toMatch(/Bodega Quito Sur/);
+    expect(screen.getByTestId('before-after').textContent).toMatch(/Previsto/);
+    await user.click(screen.getByRole('button', { name: 'Ver detalle' }));
     const summary = screen.getByTestId('task-summary');
     expect(summary.textContent).toMatch(/task-rec-moc-001/);
-    expect(summary.textContent).toMatch(/Pendiente de ejecución/);
+    expect(summary.textContent).toMatch(/pendiente de ejecución/);
+    expect(summary.textContent).toMatch(/Supervisor de inventarios/);
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: /Simular ejecución/ }));
+    expect(screen.getByTestId('movement-status').textContent).toMatch(/En ejecución/);
+    expect(inventoryTotals(store.getState())).toEqual(stock); // ejecutar aún no cambia el inventario
+    const confirm = screen.getByRole('button', { name: /Confirmar recepción/ });
+    await user.dblClick(confirm); // doble clic: una sola recepción
+    expect(screen.getByTestId('movement-status').textContent).toMatch(/Completado en simulación/);
+    const s1 = store.getState();
+    expect(inventoryTotals(s1).get('MOC-001')).toBe(300);
+    expect(s1.remoteSites[0].stockBySku['MOC-001']).toBe(390);
+    expect(s1.internalTransfers.filter((t) => t.note.includes('mov-moc-001'))).toHaveLength(1);
+    const ba = screen.getByTestId('before-after').textContent ?? '';
+    expect(ba).toMatch(/Después/);
+    expect(ba).toMatch(/600 u300 u90 u390 u/);
+    expect(ba).toMatch(/60 d30 d6,9 d30 d/);
+    expect(ba).toMatch(/USD 2.400USD 0USD 0USD 0/);
+    expect(screen.getByTestId('ba-total').textContent).toMatch(/690 u → 690 u/);
+    expect(screen.getByTestId('kpi-exposure').textContent).toBe('USD 0'); // indicadores recalculados
+    expect(screen.getByTestId('kpi-coverage').textContent).toBe('30 días');
+    expect(screen.queryByRole('button', { name: /Simular ejecución|Confirmar recepción/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Paso anterior' }));
     expect(screen.getByText('Paso 5 de 6')).toBeTruthy();
 
-    // Reinicio determinista: sin tareas, alertas ni eventos; paso 1.
+    // Reinicio determinista: sin tareas, movimientos, alertas ni eventos; paso 1.
     await user.click(screen.getByRole('button', { name: 'Reiniciar demo' }));
     const s = store.getState();
-    expect([s.events, s.alerts, s.tasks]).toEqual([[], [], []]);
+    expect([s.events, s.alerts, s.tasks, s.movements]).toEqual([[], [], [], []]);
+    expect(s.remoteSites[0].stockBySku['MOC-001']).toBe(90);
+    expect(inventoryTotals(s).get('MOC-001')).toBe(600);
     expect(s.ui.step).toBe(0);
     expect(s.purchaseOrders[0].status).toBe('EXPECTED');
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.599');

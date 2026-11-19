@@ -20,30 +20,35 @@ import {
   AISLE_W, BAY_W, DOCK_Z, FRONT_Z, LEVEL_HEIGHT, LEVELS, PORTAL_Z, RACK_DEPTH, RACK_HEIGHT, RACK_LENGTH, STORAGE_Z,
   aisleLayouts, locationPositions, rackLayouts, zoneLayouts, type Vec3,
 } from './layout';
-import type { SceneLayers } from './TwinView';
+import type { CamCommand, SceneLayers } from './TwinView';
 
 const CAMERA_HOME: Vec3 = [-21, 19, 23];
 const TARGET_HOME: Vec3 = [0.5, 0, -0.5];
 const SELECTED_BOX = '#a58bff';
+const HOVER_BOX = '#d6c9ff';
 const D2_X = 7.5;
 
 interface SceneProps {
   state: DemoState;
   expiryRiskLots: Set<string>;
   onSelect: (unitId: string) => void;
-  resetViewRequest: number;
+  /** Doble clic: enfocar la unidad. */
+  onFocusUnit: (unitId: string) => void;
+  camCommand: CamCommand | null;
   zoomRequest: { n: number; dir: number };
-  focusStep: number | null;
   layers: SceneLayers;
+  /** Rack aislado: los demás racks y su inventario se ocultan. */
+  isolatedRackId: string | null;
 }
 
 type Inst = { p: Vec3; s: Vec3; c?: string; r?: Vec3 };
 
 /** Muchas piezas iguales en una sola llamada de dibujo. `ids[i]` identifica la instancia para clic/hover. */
-function InstancedBoxes({ items, color = '#ffffff', ids, onPick, onHover, opacity, shadows = true, metal = 0 }: {
+function InstancedBoxes({ items, color = '#ffffff', ids, onPick, onHover, onDouble, opacity, shadows = true, metal = 0 }: {
   items: Inst[]; color?: string; ids?: string[]; onPick?: (id: string) => void; onHover?: (id: string | null) => void;
-  opacity?: number; shadows?: boolean; metal?: number;
+  onDouble?: (id: string) => void; opacity?: number; shadows?: boolean; metal?: number;
 }) {
+  const translucent = opacity !== undefined && opacity < 0.6;
   const ref = useRef<THREE.InstancedMesh>(null);
   useLayoutEffect(() => {
     const mesh = ref.current;
@@ -69,15 +74,16 @@ function InstancedBoxes({ items, color = '#ffffff', ids, onPick, onHover, opacit
       key={items.length}
       ref={ref}
       args={[undefined, undefined, Math.max(items.length, 1)]}
-      castShadow={shadows}
-      receiveShadow={shadows}
+      castShadow={shadows && !translucent}
+      receiveShadow={shadows && !translucent}
       raycast={onPick ? undefined : () => null}
       onClick={onPick ? (ev) => { const x = id(ev); if (x) { ev.stopPropagation(); onPick(x); } } : undefined}
+      onDoubleClick={onDouble ? (ev) => { const x = id(ev); if (x) { ev.stopPropagation(); onDouble(x); } } : undefined}
       onPointerMove={onHover ? (ev) => { const x = id(ev); if (x) { ev.stopPropagation(); onHover(x); document.body.style.cursor = 'pointer'; } } : undefined}
       onPointerOut={onHover ? () => { onHover(null); document.body.style.cursor = 'auto'; } : undefined}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={color} transparent={opacity !== undefined} opacity={opacity ?? 1} metalness={metal} roughness={metal ? 0.45 : 0.85} />
+      <meshStandardMaterial color={color} transparent={opacity !== undefined} opacity={opacity ?? 1} depthWrite={!translucent} metalness={metal} roughness={metal ? 0.45 : 0.85} />
     </instancedMesh>
   );
 }
@@ -121,7 +127,10 @@ function NoPick({ children }: { children: ReactNode }) {
 }
 
 /** Racks industriales: postes azules, largueros naranja, riostras, bandejas de malla y protectores. */
-function Racks({ racks }: { racks: { position: Vec3 }[] }) {
+/** Modo de los racks: sólidos, transparentes (por defecto: el inventario se ve y se selecciona) u ocultos. */
+import type { RackMode } from './TwinView';
+
+function Racks({ racks, mode }: { racks: { position: Vec3 }[]; mode: RackMode }) {
   const parts = useMemo(() => {
     const posts: Inst[] = []; const beams: Inst[] = []; const decks: Inst[] = []; const braces: Inst[] = []; const guards: Inst[] = []; const plates: Inst[] = [];
     for (const { position: [x, , z] } of racks) {
@@ -148,13 +157,16 @@ function Racks({ racks }: { racks: { position: Vec3 }[] }) {
     }
     return { posts, beams, decks, braces, guards, plates };
   }, [racks]);
+  if (mode === 'hidden') return null;
+  const t = mode === 'transparent';
+  // Estructura ligera: en modo transparente postes y largueros se ven, pero no tapan las cajas.
   return (
     <>
-      <InstancedBoxes items={parts.posts} color="#2f5fb3" metal={0.4} />
-      <InstancedBoxes items={parts.beams} color="#f08a24" metal={0.3} />
-      <InstancedBoxes items={parts.decks} color="#c9ced8" opacity={0.9} metal={0.5} />
-      <InstancedBoxes items={parts.braces} color="#3b6cc4" metal={0.4} shadows={false} />
-      <InstancedBoxes items={parts.guards} color="#f5c518" />
+      <InstancedBoxes items={parts.posts} color="#2f5fb3" metal={0.4} opacity={t ? 0.55 : undefined} />
+      <InstancedBoxes items={parts.beams} color="#f08a24" metal={0.3} opacity={t ? 0.5 : undefined} />
+      <InstancedBoxes items={parts.decks} color="#c9ced8" opacity={t ? 0.18 : 0.9} metal={0.5} />
+      {!t && <InstancedBoxes items={parts.braces} color="#3b6cc4" metal={0.4} shadows={false} />}
+      <InstancedBoxes items={parts.guards} color="#f5c518" opacity={t ? 0.6 : undefined} />
       <InstancedBoxes items={parts.plates} color="#8b93a3" shadows={false} />
     </>
   );
@@ -214,18 +226,22 @@ function Signage({ zones, aisles, racks, width }: {
 }
 
 /** Edificio: muros (corte bajo del lado de la cámara), muelles D1/D2 con cortinas, topes y bolardos. */
-function Building({ width, truck }: { width: number; truck: boolean }) {
+function Building({ width, truck, walls, decor }: { width: number; truck: boolean; walls: boolean; decor: boolean }) {
   const back = STORAGE_Z - RACK_LENGTH / 2 - 2.4;
   const depth = FRONT_Z - back;
   const midZ = (FRONT_Z + back) / 2;
   const doors = [{ x: 0, name: 'D1' }, { x: D2_X, name: 'D2' }];
   return (
     <NoPick>
-      <mesh position={[0, 2.5, back]} receiveShadow><boxGeometry args={[width, 5, 0.25]} /><meshStandardMaterial color="#dfe3ea" /></mesh>
-      <mesh position={[0, 0.35, back + 0.14]}><boxGeometry args={[width, 0.7, 0.04]} /><meshStandardMaterial color="#c3c8d3" /></mesh>
-      <mesh position={[width / 2, 2.5, midZ]} receiveShadow><boxGeometry args={[0.25, 5, depth]} /><meshStandardMaterial color="#e4e7ee" /></mesh>
-      <mesh position={[-width / 2, 0.6, midZ]}><boxGeometry args={[0.25, 1.2, depth]} /><meshStandardMaterial color="#e4e7ee" /></mesh>
-      {doors.map((d) => (
+      {walls && (
+        <>
+          <mesh position={[0, 2.5, back]} receiveShadow><boxGeometry args={[width, 5, 0.25]} /><meshStandardMaterial color="#dfe3ea" /></mesh>
+          <mesh position={[0, 0.35, back + 0.14]}><boxGeometry args={[width, 0.7, 0.04]} /><meshStandardMaterial color="#c3c8d3" /></mesh>
+          <mesh position={[width / 2, 2.5, midZ]} receiveShadow><boxGeometry args={[0.25, 5, depth]} /><meshStandardMaterial color="#e4e7ee" /></mesh>
+          <mesh position={[-width / 2, 0.6, midZ]}><boxGeometry args={[0.25, 1.2, depth]} /><meshStandardMaterial color="#e4e7ee" /></mesh>
+        </>
+      )}
+      {decor && doors.map((d) => (
         <group key={d.name} position={[d.x, 0, FRONT_Z]}>
           {[-1.9, 1.9].map((dx) => (
             <mesh key={dx} position={[dx, 1.9, 0]} castShadow><boxGeometry args={[0.28, 3.8, 0.3]} /><meshStandardMaterial color="#9aa1ae" metalness={0.3} /></mesh>
@@ -323,6 +339,27 @@ function IncomingPallet({ progress, remaining, poId }: { progress: number; remai
   );
 }
 
+/** Cuerpo del montacargas (sin lógica). Las horquillas apuntan a +Z local. */
+function ForkliftBody({ beacon }: { beacon?: React.Ref<THREE.MeshStandardMaterial> }) {
+  return (
+    <NoPick>
+      <mesh position={[0, 0.55, 0]} castShadow><boxGeometry args={[0.95, 0.65, 1.5]} /><meshStandardMaterial color="#e8b422" /></mesh>
+      <mesh position={[0, 0.65, -0.62]} castShadow><boxGeometry args={[0.95, 0.85, 0.3]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
+      {[[-0.42, -0.45], [0.42, -0.45], [-0.42, 0.35], [0.42, 0.35]].map(([x, z]) => (
+        <mesh key={`${x},${z}`} position={[x, 1.35, z]}><boxGeometry args={[0.05, 0.95, 0.05]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
+      ))}
+      <mesh position={[0, 1.83, -0.05]}><boxGeometry args={[0.95, 0.05, 0.9]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
+      <mesh position={[0, 0.85, 0.08]}><boxGeometry args={[0.45, 0.08, 0.45]} /><meshStandardMaterial color="#1f2229" /></mesh>
+      {[-0.3, 0.3].map((x) => <mesh key={x} position={[x, 1.2, 0.82]}><boxGeometry args={[0.07, 2.1, 0.07]} /><meshStandardMaterial color="#3a404c" metalness={0.5} /></mesh>)}
+      {[-0.22, 0.22].map((x) => <mesh key={x} position={[x, 0.12, 1.35]}><boxGeometry args={[0.1, 0.05, 1.0]} /><meshStandardMaterial color="#3a404c" metalness={0.5} /></mesh>)}
+      {[[-0.5, -0.45], [0.5, -0.45], [-0.5, 0.5], [0.5, 0.5]].map(([x, z]) => (
+        <mesh key={`w${x},${z}`} position={[x, 0.22, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.22, 0.22, 0.18, 14]} /><meshStandardMaterial color="#1f2229" /></mesh>
+      ))}
+      <mesh position={[0, 1.9, -0.3]}><sphereGeometry args={[0.07, 10, 10]} /><meshStandardMaterial ref={beacon} color="#ffd27a" emissive="#ff9f1a" emissiveIntensity={0.6} /></mesh>
+    </NoPick>
+  );
+}
+
 /** Montacargas AMBIENTAL: recorre un pasillo transversal; no transporta inventario ni es seleccionable. */
 function Forklift({ lane, phase, speed, running }: { lane: number; phase: number; speed: number; running: boolean }) {
   const g = useRef<THREE.Group>(null);
@@ -340,37 +377,20 @@ function Forklift({ lane, phase, speed, running }: { lane: number; phase: number
     g.current.rotation.y += (targetRot - g.current.rotation.y) * Math.min(1, dt * 3);
     if (beacon.current) beacon.current.emissiveIntensity = running ? 0.6 + 0.6 * Math.max(0, Math.sin(t.current * 18)) : 0.2;
   });
-  return (
-    <group ref={g}>
-      <NoPick>
-        <mesh position={[0, 0.55, 0]} castShadow><boxGeometry args={[0.95, 0.65, 1.5]} /><meshStandardMaterial color="#e8b422" /></mesh>
-        <mesh position={[0, 0.65, -0.62]} castShadow><boxGeometry args={[0.95, 0.85, 0.3]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
-        {[[-0.42, -0.45], [0.42, -0.45], [-0.42, 0.35], [0.42, 0.35]].map(([x, z]) => (
-          <mesh key={`${x},${z}`} position={[x, 1.35, z]}><boxGeometry args={[0.05, 0.95, 0.05]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
-        ))}
-        <mesh position={[0, 1.83, -0.05]}><boxGeometry args={[0.95, 0.05, 0.9]} /><meshStandardMaterial color="#2a2f3a" /></mesh>
-        <mesh position={[0, 0.85, 0.08]}><boxGeometry args={[0.45, 0.08, 0.45]} /><meshStandardMaterial color="#1f2229" /></mesh>
-        {[-0.3, 0.3].map((x) => <mesh key={x} position={[x, 1.2, 0.82]}><boxGeometry args={[0.07, 2.1, 0.07]} /><meshStandardMaterial color="#3a404c" metalness={0.5} /></mesh>)}
-        {[-0.22, 0.22].map((x) => <mesh key={x} position={[x, 0.12, 1.35]}><boxGeometry args={[0.1, 0.05, 1.0]} /><meshStandardMaterial color="#3a404c" metalness={0.5} /></mesh>)}
-        {[[-0.5, -0.45], [0.5, -0.45], [-0.5, 0.5], [0.5, 0.5]].map(([x, z]) => (
-          <mesh key={`w${x},${z}`} position={[x, 0.22, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.22, 0.22, 0.18, 14]} /><meshStandardMaterial color="#1f2229" /></mesh>
-        ))}
-        <mesh position={[0, 1.9, -0.3]}><sphereGeometry args={[0.07, 10, 10]} /><meshStandardMaterial ref={beacon} color="#ffd27a" emissive="#ff9f1a" emissiveIntensity={0.6} /></mesh>
-      </NoPick>
-    </group>
-  );
+  return <group ref={g}><ForkliftBody beacon={beacon} /></group>;
 }
 
 interface UnitBoxes { boxes: Inst[]; boxIds: string[]; pallets: Inst[]; palletIds: string[]; footprint: Map<string, { p: Vec3; h: number }> }
 
 /** Coloca pallets y cajas: color del producto; el estado solo tiñe excepciones; selección en morado. */
-function layoutUnits(units: LogisticUnit[], lotSku: Map<string, string>, locPos: Map<string, Vec3>, selectedId: string | null): UnitBoxes {
+function layoutUnits(units: LogisticUnit[], lotSku: Map<string, string>, locPos: Map<string, Vec3>, selectedId: string | null, hoveredId: string | null, visibleLoc: (locId: string) => boolean): UnitBoxes {
   const children = new Map<string, LogisticUnit[]>();
   for (const u of units) if (u.parentId) children.set(u.parentId, [...(children.get(u.parentId) ?? []), u]);
   const roots = new Map<string, LogisticUnit[]>();
   for (const u of units) if (!u.parentId) roots.set(u.expectedLocationId, [...(roots.get(u.expectedLocationId) ?? []), u]);
   const colorOf = (root: LogisticUnit, box: LogisticUnit) => {
     if (root.id === selectedId) return SELECTED_BOX;
+    if (root.id === hoveredId) return HOVER_BOX;
     if (root.verificationStatus === 'PENDING_VERIFICATION') return EVENT_COLOR.pending;
     if (root.verificationStatus === 'CONFIRMED') return EVENT_COLOR.verified;
     return familyColor(lotSku.get(box.lotId ?? '') ?? null);
@@ -379,7 +399,7 @@ function layoutUnits(units: LogisticUnit[], lotSku: Map<string, string>, locPos:
   const slot = (i: number): [number, number, number] => [((i % 4) % 2 === 0 ? -0.25 : 0.25), Math.floor(i / 4), (Math.floor((i % 4) / 2) === 0 ? -0.29 : 0.29)];
   for (const [locId, list] of roots) {
     const base = locPos.get(locId);
-    if (!base) continue;
+    if (!base || !visibleLoc(locId)) continue;
     let i = 0;
     for (const u of list) {
       if (u.type === 'PALLET') {
@@ -423,7 +443,7 @@ function UnitTooltip({ state, unit, position, pending }: { state: DemoState; uni
   );
 }
 
-function ObservationGhost({ position, unitId, locationId }: { position: Vec3; unitId: string; locationId: string }) {
+function ObservationGhost({ position, unitId, locationId, label }: { position: Vec3; unitId: string; locationId: string; label: boolean }) {
   const ring = useRef<THREE.Mesh>(null);
   const t = useRef(0);
   useFrame((_, dt) => {
@@ -440,15 +460,17 @@ function ObservationGhost({ position, unitId, locationId }: { position: Vec3; un
       <mesh ref={ring} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
         <ringGeometry args={[0.7, 0.78, 40]} /><meshBasicMaterial color={EVENT_COLOR.pending} transparent opacity={0.6} depthWrite={false} />
       </mesh>
-      <Html position={[0, -0.25, 0.9]} center pointerEvents="none" zIndexRange={[15, 5]}>
-        <div className="label3d-ghost">Detectado: {unitId} <small>· {locationId}</small></div>
-      </Html>
+      {label && (
+        <Html position={[0, -0.25, 0.9]} center pointerEvents="none" zIndexRange={[15, 5]}>
+          <div className="label3d-ghost">Detectado: {unitId} <small>· {locationId}</small></div>
+        </Html>
+      )}
     </group>
   );
 }
 
 /** Operario con lector de mano (evento simulado): camina hasta la última etiqueta leída y emite un pulso. */
-function HandheldOperator({ target, readKey }: { target: Vec3; readKey: string }) {
+function HandheldOperator({ target, readKey, label }: { target: Vec3; readKey: string; label: boolean }) {
   const group = useRef<THREE.Group>(null);
   const ring = useRef<THREE.Mesh>(null);
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
@@ -477,9 +499,11 @@ function HandheldOperator({ target, readKey }: { target: Vec3; readKey: string }
           <meshBasicMaterial ref={ringMat} color="#7c4dff" transparent opacity={0} depthWrite={false} />
         </mesh>
       </NoPick>
-      <Html position={[0, 2.0, 0]} center pointerEvents="none" zIndexRange={[14, 5]}>
-        <div className="label3d-operator">Lector de mano</div>
-      </Html>
+      {label && (
+        <Html position={[0, 2.0, 0]} center pointerEvents="none" zIndexRange={[14, 5]}>
+          <div className="label3d-operator">Lector de mano</div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -504,23 +528,141 @@ function SelectionHighlight({ foot }: { foot: { p: Vec3; h: number } }) {
   );
 }
 
-/** Cámara: vuelo suave a la vista general, al foco de cada paso y zoom con los botones. */
-function CameraRig({ reset, zoom, focus }: { reset: number; zoom: { n: number; dir: number }; focus: { target: Vec3; offset: Vec3 } | null }) {
-  const camera = useThree((s) => s.camera);
-  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update(): void } | null;
+/** Pallet con sus cajas (para el traslado; no seleccionable). Base en y = 0 local. */
+function LoadMesh({ boxes, color }: { boxes: number; color: string }) {
+  const slot = (i: number): Vec3 => [((i % 4) % 2 === 0 ? -0.25 : 0.25), 0.12 + 0.17 + Math.floor(i / 4) * 0.35, (Math.floor((i % 4) / 2) === 0 ? -0.29 : 0.29)];
+  return (
+    <NoPick>
+      <mesh position={[0, 0.06, 0]} castShadow><boxGeometry args={[1.0, 0.12, 1.22]} /><meshStandardMaterial color="#a8835a" /></mesh>
+      {Array.from({ length: boxes }, (_, i) => (
+        <mesh key={i} position={slot(i)} castShadow><boxGeometry args={[0.46, 0.33, 0.54]} /><meshStandardMaterial color={color} emissive="#7c4dff" emissiveIntensity={0.18} /></mesh>
+      ))}
+    </NoPick>
+  );
+}
+
+interface TransferLeg { unitId: string; boxes: number; color: string; origin: Vec3; aisleX: number; staging: Vec3 }
+const LEG_SECONDS = 5.5;
+const FRONT_LANE_Z = STORAGE_Z + RACK_LENGTH / 2 + 1.35;
+
+/** Posición a lo largo de una polilínea en el piso (u ∈ [0,1]) y la dirección del tramo. */
+function along(points: Vec3[], u: number): { p: Vec3; dir: [number, number] } {
+  const segs = points.slice(1).map((b, i) => { const a = points[i]; return { a, b, len: Math.hypot(b[0] - a[0], b[2] - a[2]) }; });
+  const total = segs.reduce((t, x) => t + x.len, 0) || 1;
+  let d = Math.min(1, Math.max(0, u)) * total;
+  for (let i = 0; i < segs.length; i += 1) {
+    const sg = segs[i];
+    if (d <= sg.len || i === segs.length - 1) {
+      const k = sg.len ? Math.min(1, d / sg.len) : 1;
+      return { p: [sg.a[0] + (sg.b[0] - sg.a[0]) * k, 0, sg.a[2] + (sg.b[2] - sg.a[2]) * k], dir: [sg.b[0] - sg.a[0], sg.b[2] - sg.a[2]] };
+    }
+    d -= sg.len;
+  }
+  return { p: points[points.length - 1], dir: [0, 1] };
+}
+
+const legPath = (L: TransferLeg): Vec3[] => [
+  [L.aisleX, 0, L.origin[2]], [L.aisleX, 0, FRONT_LANE_Z], [L.staging[0], 0, FRONT_LANE_Z], [L.staging[0], 0, L.staging[2] - 1.2],
+];
+
+/**
+ * Ejecución SIMULADA de un traslado registrado: el montacargas saca cada pallet del movimiento de su ubicación de
+ * origen y lo deja en el muelle de salida. La animación usa los datos del movimiento (pallets, ubicaciones, muelle).
+ */
+function TransferRun({ legs, reduced, label }: { legs: TransferLeg[]; reduced: boolean; label: string | null }) {
+  const total = legs.length * LEG_SECONDS;
+  const t = useRef(reduced ? total : 0);
+  const truck = useRef<THREE.Group>(null);
+  const loads = useRef<(THREE.Group | null)[]>([]);
+  const [done, setDone] = useState(reduced);
+  useFrame((_, dt) => {
+    t.current = Math.min(total, t.current + dt);
+    const leg = Math.min(legs.length - 1, Math.floor(t.current / LEG_SECONDS));
+    const u = t.current >= total ? 1 : (t.current - leg * LEG_SECONDS) / LEG_SECONDS;
+    legs.forEach((L, i) => {
+      const g = loads.current[i];
+      if (!g) return;
+      if (i < leg || (i === leg && u >= 1)) { g.position.set(...L.staging); return; }
+      if (i > leg) { g.position.set(...L.origin); return; }
+      // Fases: 0–0.18 sacar del rack y bajar a las horquillas · 0.18–0.92 viaje · 0.92–1 dejar en el muelle.
+      const path = legPath(L);
+      if (u < 0.18) {
+        const k = u / 0.18;
+        const e = k * k * (3 - 2 * k);
+        g.position.set(L.origin[0] + (L.aisleX - L.origin[0]) * e * 0.55, L.origin[1] * (1 - e) + 0.2 * e, L.origin[2]);
+      } else if (u < 0.92) {
+        const { p } = along(path, (u - 0.18) / 0.74);
+        g.position.set(p[0], 0.2, p[2]);
+      } else {
+        const k = (u - 0.92) / 0.08;
+        const end = path[path.length - 1];
+        g.position.set(end[0], 0.2 * (1 - k), end[2] + (L.staging[2] - end[2]) * k);
+      }
+    });
+    // El montacargas acompaña la carga del tramo actual (las horquillas quedan bajo el pallet).
+    const L = legs[leg];
+    const g = loads.current[leg];
+    if (truck.current && L && g) {
+      const dir: [number, number] = u < 0.18 ? [L.origin[0] - L.aisleX, 0] : u < 0.92 ? along(legPath(L), (u - 0.18) / 0.74).dir : [0, 1];
+      const yaw = Math.atan2(dir[0], dir[1]);
+      truck.current.rotation.y = yaw;
+      truck.current.position.set(g.position.x - Math.sin(yaw) * 1.35, 0, g.position.z - Math.cos(yaw) * 1.35);
+      truck.current.visible = t.current < total;
+    }
+    if (!done && t.current >= total) setDone(true);
+  });
+  const last = legs[legs.length - 1];
+  return (
+    <group>
+      <group ref={truck}><ForkliftBody /></group>
+      {legs.map((L, i) => (
+        <group key={L.unitId} ref={(el) => { loads.current[i] = el; }} position={reduced ? L.staging : L.origin}>
+          <LoadMesh boxes={L.boxes} color={L.color} />
+        </group>
+      ))}
+      {legs.map((L) => (
+        <mesh key={`o-${L.unitId}`} position={[L.origin[0], L.origin[1] + 0.02, L.origin[2]]} raycast={() => null}>
+          <boxGeometry args={[1.14, 0.04, 1.34]} /><meshBasicMaterial color={EVENT_COLOR.selected} wireframe />
+        </mesh>
+      ))}
+      {label && last && (
+        <Html position={[D2_X, 2.3, last.staging[2]]} center pointerEvents="none" zIndexRange={[15, 5]}>
+          <div className="label3d-operator" data-testid="transfer-label">{done ? `En muelle D2 · ${label}` : `Trasladando · ${label}`}</div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+/** Pallets del traslado aprobado (aún en su rack): contorno morado para identificar el inventario involucrado. */
+function PlannedHighlight({ feet }: { feet: { p: Vec3; h: number }[] }) {
+  return (
+    <>
+      {feet.map((f) => (
+        <mesh key={f.p.join(',')} position={[f.p[0], f.p[1] + Math.max(f.h, 0.4) / 2 + 0.02, f.p[2]]} raycast={() => null}>
+          <boxGeometry args={[1.14, Math.max(f.h, 0.4) + 0.12, 1.34]} />
+          <meshBasicMaterial color={EVENT_COLOR.selected} wireframe />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+/** Cámara: vuelos suaves a la meta indicada (vista general, superior, paso, unidad o rack) y zoom con los botones. */
+function CameraRig({ goal, zoom }: { goal: { key: number; target: Vec3; pos: Vec3 } | null; zoom: { n: number; dir: number } }) {
+  const camera = useThree((st) => st.camera);
+  const controls = useThree((st) => st.controls) as unknown as { target: THREE.Vector3; update(): void } | null;
   const camGoal = useRef<THREE.Vector3 | null>(null);
   const targetGoal = useRef<THREE.Vector3 | null>(null);
-  const fly = (target: Vec3, pos: Vec3) => { targetGoal.current = new THREE.Vector3(...target); camGoal.current = new THREE.Vector3(...pos); };
-  useEffect(() => { if (reset > 0) fly(TARGET_HOME, CAMERA_HOME); }, [reset]);
-  const focusKey = focus ? `${focus.target.join(',')}|${focus.offset.join(',')}` : '';
   useEffect(() => {
-    if (!focus) return;
-    fly(focus.target, [focus.target[0] + focus.offset[0], focus.target[1] + focus.offset[1], focus.target[2] + focus.offset[2]]);
-  }, [focusKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!goal) return;
+    targetGoal.current = new THREE.Vector3(...goal.target);
+    camGoal.current = new THREE.Vector3(...goal.pos);
+  }, [goal?.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (zoom.n === 0 || !controls) return;
     const dir = camera.position.clone().sub(controls.target);
-    const len = THREE.MathUtils.clamp(dir.length() * (zoom.dir > 0 ? 0.78 : 1.28), 7, 55);
+    const len = THREE.MathUtils.clamp(dir.length() * (zoom.dir > 0 ? 0.78 : 1.28), 4, 60);
     camGoal.current = controls.target.clone().add(dir.setLength(len));
     targetGoal.current = controls.target.clone();
   }, [zoom.n]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -555,19 +697,32 @@ function ProjectionHook({ footprint }: { footprint: Map<string, { p: Vec3; h: nu
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomRequest, focusStep, layers }: SceneProps) {
+function SceneContent({ state, expiryRiskLots, onSelect, onFocusUnit, camCommand, zoomRequest, layers, isolatedRackId }: SceneProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [lowPower, setLowPower] = useState(false);
   const reduced = useMemo(prefersReducedMotion, []);
   const zones = useMemo(() => zoneLayouts(state.zones), [state.zones]);
   const racks = useMemo(() => rackLayouts(state.zones, state.racks), [state.zones, state.racks]);
-  const storageRacks = useMemo(() => racks.filter((r) => r.storage), [racks]);
+  const storageRacks = useMemo(() => racks.filter((r) => r.storage && (!isolatedRackId || r.rack.id === isolatedRackId)), [racks, isolatedRackId]);
+  const allStorageRacks = useMemo(() => racks.filter((r) => r.storage), [racks]);
+  const locRack = useMemo(() => new Map(state.locations.map((l) => [l.id, l.rackId])), [state.locations]);
   const aisles = useMemo(() => aisleLayouts(state.zones, state.racks), [state.zones, state.racks]);
   const locPos = useMemo(() => locationPositions(state.zones, state.racks, state.locations), [state.zones, state.racks, state.locations]);
   const lotSku = useMemo(() => new Map(state.lots.map((l) => [l.id, l.skuId])), [state.lots]);
   const selected = state.units.find((u) => u.id === state.ui.selectedUnitId) ?? null;
   const selectedRoot = selected?.parentId ? state.units.find((u) => u.id === selected.parentId) ?? null : selected;
-  const units = useMemo(() => layoutUnits(state.units, lotSku, locPos, selectedRoot?.id ?? null), [state.units, lotSku, locPos, selectedRoot?.id]);
+  // Traslado en ejecución: sus pallets ya no están en el rack (los lleva el montacargas al muelle de salida).
+  const activeMove = state.movements.find((m) => m.status === 'IN_PROGRESS') ?? null;
+  const plannedMove = state.movements.find((m) => m.status === 'PLANNED') ?? null;
+  const transit = useMemo(() => {
+    if (!activeMove) return new Set<string>();
+    const ids = new Set(activeMove.unitIds);
+    state.units.forEach((u) => { if (u.parentId && ids.has(u.parentId)) ids.add(u.id); });
+    return ids;
+  }, [activeMove, state.units]);
+  const shownUnits = useMemo(() => (transit.size ? state.units.filter((u) => !transit.has(u.id)) : state.units), [state.units, transit]);
+  const units = useMemo(() => layoutUnits(shownUnits, lotSku, locPos, selectedRoot?.id ?? null, hoveredId,
+    (loc) => !isolatedRackId || locRack.get(loc) === isolatedRackId), [shownUnits, lotSku, locPos, selectedRoot?.id, hoveredId, isolatedRackId, locRack]);
   const alerting = unitsWithOpenAlerts(state);
   const isRisk = (u: LogisticUnit) => u.lotId !== null && expiryRiskLots.has(u.lotId);
   const width = zones.find((z) => z.zone.kind === 'RECEIVING')?.size[0] ?? 34;
@@ -575,7 +730,7 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
   const missing = po ? po.boxes.length - po.receivedBoxIds.length : 0;
   const dockPos = po ? locPos.get(po.dockLocationId) : undefined;
   const receiving = state.ui.playback === RECEIPT_SCENARIO_ID;
-  const ambientOn = layers.ambient && !reduced && !lowPower;
+  const ambientOn = layers.decor && !reduced && !lowPower;
 
   // Operario: pasillo de la última lectura del lector de mano, a la altura de esa bahía.
   const lastHandheld = [...state.events].reverse().find((e) => e.channel === 'RFID_HANDHELD' && e.locationHintId);
@@ -590,23 +745,73 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
 
   // Unidades leídas en una ubicación distinta de la registrada (evidencia, no traslado confirmado).
   const ghosts = state.units.filter((u) => !u.parentId && u.observedLocationId && u.observedLocationId !== u.expectedLocationId);
-  const focused = state.units.find((u) => u.id === hoveredId) ?? selectedRoot;
+  // Tooltip solo al pasar el cursor; la selección se describe en la tarjeta fuera del lienzo (menos ruido).
+  const focused = hoveredId ? state.units.find((u) => u.id === hoveredId) ?? null : null;
   const focusedFoot = focused ? units.footprint.get(focused.id) : undefined;
   const selectedFoot = selectedRoot ? units.footprint.get(selectedRoot.id) : undefined;
 
-  // Encuadre automático por paso del recorrido.
+  // Meta de cámara según la orden recibida (vista general, superior, paso del recorrido, unidad o rack).
   const pal = state.units.find((u) => u.id === 'PAL-001');
   const obsLoc = pal?.observedLocationId ?? null;
-  const focus = useMemo(() => {
-    if (focusStep === null) return null;
+  const goal = useMemo(() => {
+    if (!camCommand) return null;
+    const add = (t: Vec3, o: Vec3): Vec3 => [t[0] + o[0], t[1] + o[1], t[2] + o[2]];
     const aisleX = (n: number) => aisles.find((a) => a.aisle === n)?.x ?? 0;
-    const exp = pal ? locPos.get(pal.expectedLocationId) : undefined;
-    const obs = obsLoc ? locPos.get(obsLoc) : undefined;
-    if (focusStep === 0) return { target: TARGET_HOME, offset: [CAMERA_HOME[0] - TARGET_HOME[0], CAMERA_HOME[1] - TARGET_HOME[1], CAMERA_HOME[2] - TARGET_HOME[2]] as Vec3 };
-    if (focusStep === 1) return { target: [aisleX(4), 0.8, STORAGE_Z] as Vec3, offset: [-12, 13, 14] as Vec3 };
-    if (focusStep === 2 && exp && obs) return { target: [(exp[0] + obs[0]) / 2, 0.8, STORAGE_Z] as Vec3, offset: [-13, 15, 16] as Vec3 };
-    return { target: [aisleX(2), 0.8, STORAGE_Z] as Vec3, offset: [-12, 13, 14] as Vec3 };
-  }, [focusStep, aisles, locPos, obsLoc]); // eslint-disable-line react-hooks/exhaustive-deps
+    const home = { key: camCommand.n, target: TARGET_HOME, pos: CAMERA_HOME };
+    switch (camCommand.kind) {
+      case 'home': return home;
+      case 'top': return { key: camCommand.n, target: [0, 0, 0.6] as Vec3, pos: [0, 44, 1.2] as Vec3 };
+      case 'unit': {
+        const f = units.footprint.get(camCommand.unitId);
+        if (!f) return null;
+        const t: Vec3 = [f.p[0], f.p[1] + 0.5, f.p[2]];
+        return { key: camCommand.n, target: t, pos: add(t, [-6.5, 7, 8.5]) };
+      }
+      case 'rack': {
+        const r = racks.find((x) => x.rack.id === camCommand.rackId);
+        if (!r) return null;
+        const t: Vec3 = [r.position[0], 1.6, r.position[2]];
+        const side = r.rack.side === 'I' ? 1 : -1; // mirar desde el pasillo
+        return { key: camCommand.n, target: t, pos: add(t, [side * 8.5, 4.2, 5.5]) };
+      }
+      case 'step': {
+        const exp = pal ? locPos.get(pal.expectedLocationId) : undefined;
+        const obs = obsLoc ? locPos.get(obsLoc) : undefined;
+        if (camCommand.step === 0) return home;
+        if (camCommand.step === 1) { const t: Vec3 = [aisleX(4), 0.8, STORAGE_Z]; return { key: camCommand.n, target: t, pos: add(t, [-12, 13, 14]) }; }
+        if (camCommand.step === 5) {
+          const m = state.movements.find((x) => x.status !== 'COMPLETED') ?? state.movements.at(-1);
+          const pts = (m?.originLocationIds ?? []).map((l) => locPos.get(l)).filter((x): x is Vec3 => !!x);
+          if (pts.length) {
+            const cx = (pts.reduce((t, q) => t + q[0], 0) / pts.length + D2_X) / 2;
+            const t: Vec3 = [cx + 1, 0.6, (STORAGE_Z + FRONT_Z) / 2 + 0.5];
+            return { key: camCommand.n, target: t, pos: add(t, [-9, 15.5, 14]) };
+          }
+        }
+        if (camCommand.step === 2 && exp && obs) { const t: Vec3 = [(exp[0] + obs[0]) / 2, 0.8, STORAGE_Z]; return { key: camCommand.n, target: t, pos: add(t, [-13, 15, 16]) }; }
+        const t: Vec3 = [aisleX(2), 0.8, STORAGE_Z];
+        return { key: camCommand.n, target: t, pos: add(t, [-12, 13, 14]) };
+      }
+      default: return null;
+    }
+  }, [camCommand?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legs = useMemo((): TransferLeg[] => {
+    if (!activeMove) return [];
+    return activeMove.unitIds.flatMap((id, i) => {
+      const u = state.units.find((x) => x.id === id);
+      const origin = locPos.get(activeMove.originLocationIds[i]);
+      const rack = state.racks.find((r) => r.id === locRack.get(activeMove.originLocationIds[i]));
+      const aisle = aisles.find((a) => a.aisle === rack?.aisle);
+      if (!u || !origin || !aisle) return [];
+      const boxes = state.units.filter((x) => x.parentId === id).length;
+      return [{ unitId: id, boxes, color: familyColor(lotSku.get(u.lotId ?? '') ?? null), origin, aisleX: aisle.x,
+        staging: [D2_X + (i % 2 === 0 ? -0.65 : 0.65), 0, FRONT_Z - 1.7] as Vec3 }];
+    });
+  }, [activeMove?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const destName = activeMove ? state.remoteSites.find((x) => x.warehouseId === activeMove.toWarehouseId)?.name.replace(' (simulada)', '') ?? '' : '';
+  const plannedFeet = plannedMove ? plannedMove.unitIds.map((id) => units.footprint.get(id)).filter((f): f is { p: Vec3; h: number } => !!f) : [];
+  const lastDone = [...state.movements].reverse().find((m) => m.status === 'COMPLETED');
+  const isolatedLocs = useMemo(() => (isolatedRackId ? state.locations.filter((l) => l.rackId === isolatedRackId) : []), [isolatedRackId, state.locations]);
 
   return (
     <>
@@ -640,18 +845,22 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
         </mesh>
       ))}
 
-      <Building width={width} truck={po?.status !== 'CLOSED'} />
-      {layers.labels && <Signage zones={zones} aisles={aisles} racks={storageRacks} width={width} />}
+      <Building width={width} truck={po?.status !== 'CLOSED'} walls={layers.walls} decor={layers.decor} />
+      {layers.signage && <Signage zones={zones} aisles={aisles} racks={allStorageRacks} width={width} />}
       <RfidPortal readCount={po?.readCount ?? 0} reading={receiving} />
       {receiving && po && (
         <IncomingPallet progress={po.receivedBoxIds.length / po.boxes.length} remaining={po.boxes.length - po.receivedBoxIds.length - 1} poId={po.id} />
       )}
-      <Forklift lane={STORAGE_Z + RACK_LENGTH / 2 + 2.4} phase={0.15} speed={0.07} running={ambientOn} />
-      <Forklift lane={STORAGE_Z - RACK_LENGTH / 2 - 1.2} phase={1.2} speed={0.05} running={ambientOn} />
+      {/* Montacargas ambiental: solo por el pasillo trasero (no se cruza delante del inventario). */}
+      {layers.decor && <Forklift lane={STORAGE_Z - RACK_LENGTH / 2 - 1.2} phase={1.2} speed={0.05} running={ambientOn} />}
 
-      <Racks racks={storageRacks} />
-      <InstancedBoxes items={units.pallets} color="#a8835a" ids={units.palletIds} onPick={onSelect} onHover={setHoveredId} />
-      <InstancedBoxes items={units.boxes} ids={units.boxIds} onPick={onSelect} onHover={setHoveredId} />
+      <Racks racks={storageRacks} mode={layers.racks} />
+      {layers.inventory && (
+        <>
+          <InstancedBoxes items={units.pallets} color="#a8835a" ids={units.palletIds} onPick={onSelect} onHover={setHoveredId} onDouble={onFocusUnit} />
+          <InstancedBoxes items={units.boxes} ids={units.boxIds} onPick={onSelect} onHover={setHoveredId} onDouble={onFocusUnit} />
+        </>
+      )}
 
       {/* Riesgo de vencimiento: franja roja sobre los pallets del lote. */}
       {state.units.filter((u) => u.type === 'PALLET' && isRisk(u)).map((u) => {
@@ -666,13 +875,22 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
       {po && po.status === 'CLOSED' && missing > 0 && dockPos && (
         <group position={[dockPos[0] + 0.25, dockPos[1] + 0.29 + 2 * 0.35, dockPos[2] + 0.29]}>
           <mesh raycast={() => null}><boxGeometry args={[0.5, 0.36, 0.58]} /><meshBasicMaterial color={EVENT_COLOR.pending} wireframe /></mesh>
-          <Html position={[0, 0.9, 0]} center pointerEvents="none" zIndexRange={[15, 5]}>
+          {layers.labels && <Html position={[0, 0.9, 0]} center pointerEvents="none" zIndexRange={[15, 5]}>
             <div className="label3d-missing">Falta {missing} caja{missing > 1 ? 's' : ''} · {po.id}</div>
-          </Html>
+          </Html>}
         </group>
       )}
 
       {selectedFoot && <SelectionHighlight foot={selectedFoot} />}
+      {plannedFeet.length > 0 && <PlannedHighlight feet={plannedFeet} />}
+      {activeMove && legs.length > 0 && (
+        <TransferRun key={activeMove.id} legs={legs} reduced={reduced} label={layers.labels ? `${activeMove.quantity} u → ${destName}` : null} />
+      )}
+      {lastDone && !activeMove && layers.labels && (
+        <Html position={[D2_X, 1.6, FRONT_Z - 1.7]} center pointerEvents="none" zIndexRange={[15, 5]}>
+          <div className="label3d-done" data-testid="transfer-done-label">Recibido en {state.remoteSites.find((x) => x.warehouseId === lastDone.toWarehouseId)?.name.replace(' (simulada)', '')} · {lastDone.receivedQuantity} u</div>
+        </Html>
+      )}
 
       {ghosts.map((u) => {
         const obs = locPos.get(u.observedLocationId!);
@@ -685,7 +903,7 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
               <boxGeometry args={[1.2, 1.0, 1.4]} />
               <meshBasicMaterial color="#3b82f6" wireframe />
             </mesh>
-            <ObservationGhost position={obs} unitId={u.id} locationId={u.observedLocationId!} />
+            <ObservationGhost position={obs} unitId={u.id} locationId={u.observedLocationId!} label={layers.labels} />
             <Line
               points={[[exp[0], exp[1] + 1.0, exp[2]], [exp[0], y, exp[2]], [obs[0], y, obs[2]], [obs[0], obs[1] + 1.0, obs[2]]]}
               color={EVENT_COLOR.pending}
@@ -702,11 +920,21 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest, zoomR
         <UnitTooltip state={state} unit={focused} position={focusedFoot.p} pending={alerting.has(focused.id)} />
       )}
       {operator && lastHandheld && !receiving && (state.ui.playback === COUNT_SCENARIO_ID || state.events.some((e) => e.id === 'evt-demo-001')) && (
-        <HandheldOperator target={operator} readKey={lastHandheld.id} />
+        <HandheldOperator target={operator} readKey={lastHandheld.id} label={layers.labels} />
       )}
 
-      <OrbitControls makeDefault enableDamping target={TARGET_HOME} minDistance={6} maxDistance={58} minPolarAngle={0.2} maxPolarAngle={1.35} />
-      <CameraRig reset={resetViewRequest} zoom={zoomRequest} focus={focus} />
+      {/* Placas de ubicación pegadas al larguero, del lado del pasillo (sin etiquetas flotantes). */}
+      {layers.labels && isolatedLocs.map((l) => {
+        const p = locPos.get(l.id);
+        const side = state.racks.find((r) => r.id === l.rackId)?.side === 'I' ? 1 : -1;
+        return p ? (
+          <TextPlane key={l.id} text={l.id} position={[p[0] + side * (RACK_DEPTH / 2 + 0.06), p[1] + 0.02, p[2]]} height={0.15}
+            color="#17142f" bg="#ffffff" rotation={[0, side * Math.PI / 2, 0]} weight={700} />
+        ) : null;
+      })}
+
+      <OrbitControls makeDefault enableDamping target={TARGET_HOME} minDistance={3.5} maxDistance={60} minPolarAngle={0} maxPolarAngle={1.35} />
+      <CameraRig goal={goal} zoom={zoomRequest} />
       <ProjectionHook footprint={units.footprint} />
       <PerformanceMonitor onDecline={() => setLowPower(true)} />
       <AdaptiveDpr pixelated />

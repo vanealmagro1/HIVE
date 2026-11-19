@@ -1,12 +1,14 @@
 // Panel contextual (solo el paso actual), barra de 6 pasos y drawer de detalle técnico.
 import {
-  ArrowRight, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock, Lightbulb, MapPin, RotateCcw, ScanLine,
+  ArrowRight, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock, Forklift, Lightbulb, MapPin, PackageCheck, RotateCcw, ScanLine,
   TrendingUp, TriangleAlert, Truck, Warehouse, X,
 } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { formatNumber, formatUsd } from '../../domain/format';
 import { receiptShortage } from '../../engine/receiving';
 import { getScenario } from '../../engine/scenarios';
+import { siteName, transferComparison, type TransferComparison } from '../../engine/transfers';
+import type { Movement } from '../../domain/types';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
 import {
   alertStory, COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, demoSteps, eventSourceLabel,
@@ -18,6 +20,7 @@ import AnalyticsPanel from '../panels/AnalyticsPanel';
 import RecommendationCard from '../panels/RecommendationCard';
 import RfidPanel from '../panels/RfidPanel';
 import { productIcon } from './Shell';
+import { DemandChart } from '../charts/SkuInsight';
 
 const HERO_SKU = 'MOC-001';
 
@@ -37,6 +40,44 @@ function ProductRow({ title, sub, skuId, badge }: { title: string; sub: string; 
 
 function Fact({ value, label, tone }: { value: string; label: string; tone?: 'warn' | 'good' }) {
   return <div className={`fact${tone ? ` ${tone}` : ''}`}><div className="fact-value">{value}</div><div className="fact-label">{label}</div></div>;
+}
+
+const MOVEMENT_STATUS: Record<Movement['status'], { text: string; cls: string }> = {
+  PLANNED: { text: 'Pendiente de ejecución', cls: 'pending' },
+  IN_PROGRESS: { text: 'En ejecución', cls: 'info' },
+  COMPLETED: { text: 'Completado en simulación', cls: 'ok' },
+};
+
+const days = (v: number | null) => (v === null ? '—' : `${formatNumber(v, Number.isInteger(v) ? 0 : 1)} d`);
+
+/** Antes/después por bodega; el total se conserva (traslado interno, no venta). */
+function BeforeAfter({ c }: { c: TransferComparison }) {
+  const row = (label: string, f: (x: TransferComparison['origin']['before']) => string) => (
+    <tr>
+      <th scope="row">{label}</th>
+      <td>{f(c.origin.before)}</td><td className="ba-after">{f(c.origin.after)}</td>
+      <td>{f(c.destination.before)}</td><td className="ba-after">{f(c.destination.after)}</td>
+    </tr>
+  );
+  return (
+    <div data-testid="before-after">
+      <table className="ba-table">
+        <thead>
+          <tr><th /><th colSpan={2}>{c.origin.before.name.replace(' (simulada)', '')}</th><th colSpan={2}>{c.destination.before.name.replace(' (simulada)', '')}</th></tr>
+          <tr className="ba-sub"><th /><th>Antes</th><th>{c.confirmed ? 'Después' : 'Previsto'}</th><th>Antes</th><th>{c.confirmed ? 'Después' : 'Previsto'}</th></tr>
+        </thead>
+        <tbody>
+          {row('Stock', (x) => `${formatNumber(x.stock)} u`)}
+          {row('Cobertura', (x) => days(x.coverageDays))}
+          {row('Exposición', (x) => formatUsd(x.exposureUsd))}
+        </tbody>
+      </table>
+      <div className="ba-total" data-testid="ba-total">
+        Total entre bodegas: <strong>{formatNumber(c.totalBefore)} u → {formatNumber(c.totalAfter)} u</strong>
+        {c.totalBefore === c.totalAfter && <span className="muted"> · se conserva</span>}
+      </div>
+    </div>
+  );
 }
 
 function Title({ icon, children, tone = 'var(--purple)' }: { icon: ReactNode; children: ReactNode; tone?: string }) {
@@ -163,7 +204,8 @@ export function StepPanel({ state, actions }: { state: DemoState; actions: Actio
           <Fact value={formatNumber(a.excessUnits ?? 0)} label="unidades excedentes" tone="warn" />
           <Fact value={formatUsd(a.excessExposureUsd ?? 0)} label="exposición estimada" tone="warn" />
         </div>
-        <p className="note">Escenario de sobrestock con objetivo de {a.targetCoverageDays} días. Es un análisis independiente del pallet en revisión.</p>
+        <DemandChart state={state} a={a} compact />
+        <p className="note">Continua: despachos de 30 días · punteada: proyección.</p>
         <div className="panel-actions">{next}{detail('Ver cálculo')}</div>
       </>
     );
@@ -186,19 +228,53 @@ export function StepPanel({ state, actions }: { state: DemoState; actions: Actio
       </>
     );
   } else if (step === 5) {
-    const audit = [...state.audit].reverse().find((x) => x.message.includes(DEMO_RECOMMENDATION_ID));
+    const m = state.movements.find((x) => x.recommendationId === DEMO_RECOMMENDATION_ID);
+    const st = m ? MOVEMENT_STATUS[m.status] : null;
+    const comparison = m ? transferComparison(state, m) : null;
+    const dest = m ? state.remoteSites.find((x) => x.warehouseId === m.toWarehouseId) : undefined;
+    const heading = !m ? 'Acción registrada' : m.status === 'PLANNED' ? 'Acción registrada' : m.status === 'IN_PROGRESS' ? 'Traslado en curso' : 'Resultado verificado';
     body = task && rec && a ? (
       <>
-        <Title icon={<ClipboardCheck size={30} />} tone="var(--success)">Acción registrada</Title>
-        <ProductRow title={a.skuName} sub={`${a.skuId} · ${rec.title}`} skuId={a.skuId} />
-        <dl className="kv" style={{ margin: 0 }} data-testid="task-summary">
-          <dt>Tarea</dt><dd><strong>{task.id}</strong></dd>
-          <dt>Responsable</dt><dd>{task.owner}</dd>
-          <dt>Estado</dt><dd><span className="status-chip pending">Pendiente de ejecución</span></dd>
-          <dt>Auditoría</dt><dd>#{audit?.seq ?? '—'}</dd>
-        </dl>
-        <p className="note">La aprobación crea la tarea; el movimiento físico aún no se ha ejecutado.</p>
-        <div className="panel-actions">{detail()}</div>
+        <Title icon={m?.status === 'COMPLETED' ? <PackageCheck size={30} /> : <ClipboardCheck size={30} />} tone="var(--success)">{heading}</Title>
+        {!m && <ProductRow title={a.skuName} sub={`${a.skuId} · ${rec.title}`} skuId={a.skuId} />}
+        {m && st ? (
+          <>
+            <div className="route" data-testid="movement-route">
+              <div className="loc-box"><div className="loc-label">Origen · {siteName(state, m.fromWarehouseId).replace(' (simulada)', '').replace('Bodega ', '')}</div>
+                <div className="loc-value"><MapPin size={16} /> {m.originLocationIds.join(' · ')}</div></div>
+              <ArrowRight size={20} aria-hidden />
+              <div className="loc-box detected"><div className="loc-label">Destino · {dest?.dockName ?? 'muelle'}</div>
+                <div className="loc-value">{siteName(state, m.toWarehouseId).replace(' (simulada)', '')}</div></div>
+            </div>
+            <span className={`status-chip ${st.cls}`} data-testid="movement-status">
+              {m.status === 'COMPLETED' ? <Check size={14} /> : <Clock size={14} />} {st.text} · {formatNumber(m.quantity)} u · {m.unitIds.length} pallets
+            </span>
+            {comparison && <BeforeAfter c={comparison} />}
+            {m.status === 'IN_PROGRESS' && (
+              <p className="note">El inventario cambia solo cuando el destino confirma lo recibido.</p>
+            )}
+            {m.status === 'COMPLETED' && (
+              <p className="note">Traslado interno, no venta: ambas bodegas quedan en su cobertura objetivo.</p>
+            )}
+            <div className="panel-actions">
+              {m.status === 'PLANNED' && (
+                <button type="button" className="btn btn-primary" onClick={() => actions.simulateExecution(m.id)}><Forklift size={18} /> Simular ejecución</button>
+              )}
+              {m.status === 'IN_PROGRESS' && (
+                <button type="button" className="btn btn-primary" onClick={() => actions.confirmReception(m.id)}>
+                  <PackageCheck size={18} /> Confirmar recepción · {formatNumber(m.quantity)} u
+                </button>
+              )}
+              {detail()}
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="status-chip pending">Pendiente de ejecución</span>
+            <p className="note">No se pudo preparar el traslado automáticamente; revisa la bitácora en el detalle.</p>
+            <div className="panel-actions">{detail()}</div>
+          </>
+        )}
       </>
     ) : (
       <>
@@ -246,6 +322,28 @@ export function StepBar({ state, actions }: { state: DemoState; actions: Actions
   );
 }
 
+/** Tarea, responsable, tiempos y movimiento (detalle técnico del paso 6). */
+function TaskDetail({ state }: { state: DemoState }) {
+  const task = state.tasks.find((t) => t.recommendationId === DEMO_RECOMMENDATION_ID);
+  const m = state.movements.find((x) => x.recommendationId === DEMO_RECOMMENDATION_ID);
+  if (!task) return <p className="muted">Aún no hay tarea.</p>;
+  const audit = state.audit.filter((x) => x.message.includes(DEMO_RECOMMENDATION_ID) || (m && x.message.includes(m.id)));
+  return (
+    <dl className="kv" data-testid="task-summary">
+      <dt>Tarea</dt><dd><strong>{task.id}</strong> · {task.status === 'OPEN' ? 'pendiente de ejecución' : task.status === 'IN_PROGRESS' ? 'en ejecución' : 'completada en simulación'}</dd>
+      <dt>Responsable</dt><dd>{task.owner}</dd>
+      <dt>Aprobada</dt><dd>{task.createdAt ?? '—'}</dd>
+      {m && <>
+        <dt>Movimiento</dt><dd><code>{m.id}</code> · {formatNumber(m.quantity)} u de {m.skuId}</dd>
+        <dt>Pallets</dt><dd>{m.unitIds.map((id, i) => `${id} (${m.originLocationIds[i]})`).join(' · ')}</dd>
+        <dt>Inicio</dt><dd>{m.startedAt ?? '—'}</dd>
+        <dt>Recepción</dt><dd>{m.completedAt ? `${m.completedAt} · ${formatNumber(m.receivedQuantity ?? 0)} u confirmadas` : '—'}</dd>
+      </>}
+      <dt>Auditoría</dt><dd>{audit.map((x) => `#${x.seq}`).join(' · ') || '—'}</dd>
+    </dl>
+  );
+}
+
 /** Detalle técnico del paso actual: evidencia, procedencia, fórmulas y auditoría. */
 export function DetailDrawer({ state, actions }: { state: DemoState; actions: Actions }) {
   useEffect(() => {
@@ -277,6 +375,7 @@ export function DetailDrawer({ state, actions }: { state: DemoState; actions: Ac
   else if (step === 3) body = <AnalyticsPanel state={state} actions={actions} />;
   else body = (
     <>
+      {step === 5 && <TaskDetail state={state} />}
       {rec && <RecommendationCard rec={rec} task={state.tasks.find((t) => t.recommendationId === rec.id)} actions={actions} showAssumptions />}
       <h3>Bitácora</h3>
       <ol className="small">{state.audit.map((x) => <li key={x.seq}>#{x.seq} · {x.message}</li>)}</ol>

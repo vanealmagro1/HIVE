@@ -20,6 +20,7 @@ export function buildAnalyticsRecommendations(analytics: SkuAnalytics[]): Recomm
         skuId: a.skuId,
         unitId: null,
         estimatedImpactUsd: a.excessExposureUsd,
+        quantity: Math.round(a.excessUnits),
         status: 'PROPOSED',
         assumptions: a.assumptions,
       });

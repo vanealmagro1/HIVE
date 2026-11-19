@@ -17,13 +17,16 @@ function storyOf(a: SkuAnalytics): string {
   return parts.join(' ');
 }
 
-function SkuCard({ a }: { a: SkuAnalytics }) {
+function SkuCard({ a, onChart, focused }: { a: SkuAnalytics; onChart: () => void; focused: boolean }) {
   const risk = a.expiryRisks.find((r) => r.remainingAtExpiry > 0);
   return (
     <article className="sku-card" data-testid={`analytics-${a.skuId}`}>
       <header className="sku-head">
         <span className="sku-name">{a.skuName}</span> <span className="muted small">{a.skuId}</span>
         <span className="pill">Datos sintéticos</span>
+        <button type="button" className="btn btn-small" onClick={onChart} aria-pressed={focused}>
+          {focused ? 'En las gráficas' : 'Ver gráficas'}
+        </button>
       </header>
       <div className="story">{storyOf(a)}</div>
       {!a.forecastAvailable ? (
@@ -94,7 +97,7 @@ export default function AnalyticsPanel({ state, actions }: { state: DemoState; a
       </p>
       {top.map((a) => (
         <div key={a.skuId}>
-          <SkuCard a={a} />
+          <SkuCard a={a} focused={state.ui.skuId === a.skuId} onChart={() => { actions.setSku(a.skuId); document.querySelector('[data-testid="sku-explorer"]')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }} />
           {recs.filter((r) => r.skuId === a.skuId).map((r) => (
             <RecommendationCard key={r.id} rec={r} task={state.tasks.find((t) => t.recommendationId === r.id)} actions={actions} showAssumptions />
           ))}

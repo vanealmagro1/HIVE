@@ -3,6 +3,10 @@ import { formatUsd } from '../../domain/format';
 import type { Recommendation, Task } from '../../domain/types';
 import type { Actions } from '../actions';
 
+const TASK_TEXT: Record<Task['status'], string> = {
+  OPEN: 'Pendiente de ejecución', IN_PROGRESS: 'En ejecución', DONE: 'Completado en simulación',
+};
+
 const STATUS_TEXT: Record<Recommendation['status'], string> = {
   PROPOSED: 'PROPUESTA', APPROVED: 'APROBADA', REJECTED: 'RECHAZADA',
 };
@@ -32,8 +36,10 @@ export default function RecommendationCard({ rec, task, actions, showAssumptions
       )}
       {task && (
         <div className="task-line" ref={taskRef} data-testid={`task-${task.id}`}>
-          ✔ Tarea creada · {task.status === 'OPEN' ? 'ABIERTA' : 'HECHA'} · Responsable: {task.owner}
-          <div className="muted small">El inventario y el ERP no se modifican: la tarea la ejecuta el equipo.</div>
+          ✔ Tarea creada · {TASK_TEXT[task.status]} · Responsable: {task.owner}
+          <div className="muted small">{task.status === 'DONE'
+            ? 'Traslado confirmado en destino: el inventario simulado ya refleja el cambio (sin ajuste ERP).'
+            : 'Aprobar no mueve inventario: el traslado se simula y se confirma en destino (paso 6).'}</div>
         </div>
       )}
       <details>
