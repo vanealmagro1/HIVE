@@ -4,6 +4,8 @@ import type { DemoState } from '../../store/demoState';
 import type { Actions } from '../actions';
 import RecommendationCard from './RecommendationCard';
 
+const TOP = 4;
+
 const n = (v: number | null) => (v === null ? '—' : formatNumber(v, Number.isInteger(v) ? 0 : 1));
 
 /** Frase de negocio que resume el cálculo. */
@@ -80,11 +82,17 @@ export default function AnalyticsPanel({ state, actions }: { state: DemoState; a
   // Priorizar: primero lo que más dinero expone.
   const exposure = (a: SkuAnalytics) => Math.max(a.excessExposureUsd ?? 0, a.expiryExposureUsd ?? 0, a.stagnantValueUsd ?? 0);
   const sorted = [...analytics].sort((x, y) => exposure(y) - exposure(x));
+  const top = sorted.slice(0, TOP);
+  const rest = sorted.slice(TOP);
+  const restExposure = rest.reduce((s, a) => s + exposure(a), 0);
   return (
     <div data-testid="analytics-panel">
       <h2>Predicciones</h2>
-      <p className="panel-intro">Productos ordenados por dinero en riesgo. Cálculos explicables con las ventas de los últimos 30 días (al {state.referenceDate}); no es un modelo de IA.</p>
-      {sorted.map((a) => (
+      <p className="panel-intro">
+        HIVE revisó {analytics.length} productos con las ventas de los últimos 30 días (al {state.referenceDate}).
+        Estos {TOP} concentran el dinero en riesgo. Son cálculos explicables, no un modelo de IA.
+      </p>
+      {top.map((a) => (
         <div key={a.skuId}>
           <SkuCard a={a} />
           {recs.filter((r) => r.skuId === a.skuId).map((r) => (
@@ -92,6 +100,9 @@ export default function AnalyticsPanel({ state, actions }: { state: DemoState; a
           ))}
         </div>
       ))}
+      <div className="result-box ok small">
+        Los otros {rest.length} productos suman {formatUsd(restExposure)} en riesgo: por debajo del umbral para proponer acciones.
+      </div>
     </div>
   );
 }

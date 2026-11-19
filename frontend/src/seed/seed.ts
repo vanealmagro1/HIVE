@@ -1,123 +1,96 @@
 // Semilla FIJA y determinista de la demo. Todas las cifras son FICTICIAS (datos sintéticos).
+// Empresa ficticia del segmento objetivo (retail de papelería y tecnología en Quito, ~12.000 unidades).
 // Fecha de referencia: 2026-11-19 (ver domain/constants.ts).
+//
+// Productos protagonistas del guion (cifras validadas por pruebas):
+//   MOC-001 Mochila escolar básica   600 u · 10 u/día · USD 8  → 60 días, exceso 300 u, USD 2.400
+//   TIN-001 Cartucho de tinta negra  120 u · 4 u/día · USD 12, lote vence en 15 días → 60 u, USD 720
+//   CAL-001 Calculadora de bolsillo  200 u · un despacho antiguo → sin pronóstico; inmovilizado por regla
 import { addDays } from '../domain/dates';
-import { REFERENCE_DATE, DEMAND_WINDOW_DAYS, DEFAULT_TARGET_COVERAGE_DAYS } from '../domain/constants';
-import type {
-  DailyDemand, Location, LogisticUnit, Rack, SeedData, Zone,
-} from '../domain/types';
+import { DEFAULT_TARGET_COVERAGE_DAYS, DEMAND_WINDOW_DAYS, REFERENCE_DATE } from '../domain/constants';
+import type { DailyDemand, Lot, LogisticUnit, SeedData, SKU } from '../domain/types';
+import { buildStructure, generateInventory, HERO, LAST_RFID_SWEEP, WAREHOUSE_ID } from './generator';
 
-const WAREHOUSE_ID = 'WH-01';
+/** Ubicación libre reservada para el guion: allí el lector de mano "encuentra" PAL-001. */
+export const DEMO_OBSERVED_LOCATION = 'P4-D02-N2';
 
-const zones: Zone[] = ['A', 'B', 'C'].map((z) => ({
-  id: `Z-${z}`, warehouseId: WAREHOUSE_ID, name: `Zona ${z}`,
-}));
+interface PalletSpec { id: string; lotId: string; locationId: string; boxes: number; qty: number }
 
-// 2 racks por zona.
-const racks: Rack[] = zones.flatMap((zone) => {
-  const z = zone.id.slice(2);
-  return [1, 2].map((n) => ({ id: `R-${z}${n}`, zoneId: zone.id, name: `Rack ${z}${n}` }));
-});
-
-// 3 niveles por rack, 1 posición por nivel -> 18 ubicaciones.
-// Rack X1 contiene LOC-X1..X3 (niveles 1..3); Rack X2 contiene LOC-X4..X6.
-const locations: Location[] = racks.flatMap((rack) => {
-  const z = rack.id[2];
-  const rackIndex = Number(rack.id[3]); // 1 o 2
-  return [1, 2, 3].map((level) => ({
-    id: `LOC-${z}${(rackIndex - 1) * 3 + level}`,
-    rackId: rack.id,
-    level,
-    slot: 1,
-  }));
-});
-
-interface PalletSpec { id: string; lotId: string; locationId: string; boxQty: [number, number] }
-
-// 8 pallets, 2 cajas por pallet = 16 cajas.
-// SKU-A: 4 pallets x 150 = 600. SKU-B: 2 x 60 = 120. SKU-C: 2 x 100 = 200.
-const palletSpecs: PalletSpec[] = [
-  { id: 'PAL-001', lotId: 'LOT-A-01', locationId: 'LOC-A1', boxQty: [75, 75] },
-  { id: 'PAL-002', lotId: 'LOT-A-01', locationId: 'LOC-A2', boxQty: [75, 75] },
-  { id: 'PAL-003', lotId: 'LOT-A-02', locationId: 'LOC-A4', boxQty: [75, 75] },
-  { id: 'PAL-004', lotId: 'LOT-A-02', locationId: 'LOC-A5', boxQty: [75, 75] },
-  { id: 'PAL-005', lotId: 'LOT-B-01', locationId: 'LOC-B4', boxQty: [30, 30] },
-  { id: 'PAL-006', lotId: 'LOT-B-01', locationId: 'LOC-B5', boxQty: [30, 30] },
-  { id: 'PAL-007', lotId: 'LOT-C-01', locationId: 'LOC-C1', boxQty: [50, 50] },
-  { id: 'PAL-008', lotId: 'LOT-C-01', locationId: 'LOC-C4', boxQty: [50, 50] },
+const HERO_PALLETS: PalletSpec[] = [
+  { id: 'PAL-001', lotId: 'L-MOC-001-A', locationId: 'P2-I03-N1', boxes: 6, qty: 25 },
+  { id: 'PAL-002', lotId: 'L-MOC-001-A', locationId: 'P2-I04-N1', boxes: 6, qty: 25 },
+  { id: 'PAL-003', lotId: 'L-MOC-001-B', locationId: 'P2-D03-N1', boxes: 6, qty: 25 },
+  { id: 'PAL-004', lotId: 'L-MOC-001-B', locationId: 'P2-D04-N1', boxes: 6, qty: 25 },
+  { id: 'PAL-005', lotId: 'L-TIN-001-A', locationId: 'P5-I01-N1', boxes: 6, qty: 10 },
+  { id: 'PAL-006', lotId: 'L-TIN-001-A', locationId: 'P5-I02-N1', boxes: 6, qty: 10 },
+  { id: 'PAL-007', lotId: 'L-CAL-001', locationId: 'P6-D01-N1', boxes: 4, qty: 25 },
+  { id: 'PAL-008', lotId: 'L-CAL-001', locationId: 'P6-D04-N2', boxes: 4, qty: 25 },
 ];
 
-function baseUnit(partial: Pick<LogisticUnit, 'id' | 'type' | 'parentId' | 'lotId' | 'quantityBaseUnits' | 'expectedLocationId'>): LogisticUnit {
-  return {
-    ...partial,
-    observedLocationId: null,
-    verificationStatus: 'EXPECTED',
-    lastObservedAt: null,
-    lastEventId: null,
-  };
-}
+const HERO_SKUS: SKU[] = [
+  { id: HERO.MOCHILA, name: 'Mochila escolar básica', unitCost: 8, hasExpiry: false, category: 'UTI' },
+  { id: HERO.TINTA, name: 'Cartucho de tinta negra original', unitCost: 12, hasExpiry: true, category: 'TIN' },
+  { id: HERO.CALCULADORA, name: 'Calculadora básica de bolsillo', unitCost: 5, hasExpiry: false, category: 'TEC' },
+];
 
-const units: LogisticUnit[] = palletSpecs.flatMap((p) => {
-  const n = p.id.slice(4); // '001'
-  const boxes = p.boxQty.map((qty, i) => baseUnit({
-    id: `BOX-${n}-${i + 1}`,
-    type: 'BOX',
-    parentId: p.id,
-    lotId: p.lotId,
-    quantityBaseUnits: qty,
-    expectedLocationId: p.locationId,
-  }));
-  const pallet = baseUnit({
-    id: p.id,
-    type: 'PALLET',
-    parentId: null,
-    lotId: p.lotId,
-    quantityBaseUnits: p.boxQty[0] + p.boxQty[1], // contenido declarado, no se suma al stock
-    expectedLocationId: p.locationId,
+const HERO_LOTS: Lot[] = [
+  { id: 'L-MOC-001-A', skuId: HERO.MOCHILA, expiryDate: null },
+  { id: 'L-MOC-001-B', skuId: HERO.MOCHILA, expiryDate: null },
+  { id: 'L-TIN-001-A', skuId: HERO.TINTA, expiryDate: addDays(REFERENCE_DATE, 15) }, // 2026-12-04
+  { id: 'L-CAL-001', skuId: HERO.CALCULADORA, expiryDate: null },
+];
+
+function heroUnits(): LogisticUnit[] {
+  const read = (u: Omit<LogisticUnit, 'observedLocationId' | 'verificationStatus' | 'lastObservedAt' | 'lastEventId'>): LogisticUnit => ({
+    ...u, observedLocationId: u.expectedLocationId, verificationStatus: 'OBSERVED', lastObservedAt: LAST_RFID_SWEEP, lastEventId: null,
   });
-  return [pallet, ...boxes];
-});
+  return HERO_PALLETS.flatMap((p) => {
+    const n = p.id.slice(4);
+    const pallet = read({ id: p.id, type: 'PALLET', parentId: null, lotId: p.lotId, quantityBaseUnits: p.boxes * p.qty, expectedLocationId: p.locationId });
+    const boxes = Array.from({ length: p.boxes }, (_, i) => read({
+      id: `BOX-${n}-${i + 1}`, type: 'BOX', parentId: p.id, lotId: p.lotId, quantityBaseUnits: p.qty, expectedLocationId: p.locationId,
+    }));
+    return [pallet, ...boxes];
+  });
+}
 
 function dailySeries(skuId: string, unitsPerDay: number): DailyDemand[] {
-  // Los últimos 30 días ANTES de la fecha de referencia: 2026-10-20 .. 2026-11-18.
+  // Los 30 días ANTES de la fecha de referencia: 2026-10-20 .. 2026-11-18.
   return Array.from({ length: DEMAND_WINDOW_DAYS }, (_, i) => ({
-    skuId,
-    date: addDays(REFERENCE_DATE, -(DEMAND_WINDOW_DAYS - i)),
-    dispatchedBaseUnits: unitsPerDay,
+    skuId, date: addDays(REFERENCE_DATE, -(DEMAND_WINDOW_DAYS - i)), dispatchedBaseUnits: unitsPerDay,
   }));
 }
 
-export function createSeed(): SeedData {
-  return structuredClone({
-    company: { id: 'CMP-DEMO', name: 'Empresa Demo (ficticia)' },
-    warehouse: { id: WAREHOUSE_ID, companyId: 'CMP-DEMO', name: 'Bodega Demo Quito (simulada)' },
+function buildSeed(): SeedData {
+  const { zones, racks, locations } = buildStructure();
+  const reserved = new Set([...HERO_PALLETS.map((p) => p.locationId), DEMO_OBSERVED_LOCATION]);
+  const gen = generateInventory({ referenceDate: REFERENCE_DATE, windowDays: DEMAND_WINDOW_DAYS, locations, racks, reserved });
+  return {
+    company: { id: 'CMP-DEMO', name: 'Distribuidora Andina · Papelería y Tecnología (ficticia)' },
+    warehouse: { id: WAREHOUSE_ID, companyId: 'CMP-DEMO', name: 'Bodega Quito Norte (simulada)' },
     zones,
     racks,
     locations,
-    skus: [
-      { id: 'SKU-A', name: 'Producto A · envase 1 L', unitCost: 8, hasExpiry: false },
-      { id: 'SKU-B', name: 'Producto B · perecible', unitCost: 12, hasExpiry: true },
-      { id: 'SKU-C', name: 'Producto C · repuesto', unitCost: 5, hasExpiry: false },
-    ],
-    lots: [
-      { id: 'LOT-A-01', skuId: 'SKU-A', expiryDate: null },
-      { id: 'LOT-A-02', skuId: 'SKU-A', expiryDate: null },
-      { id: 'LOT-B-01', skuId: 'SKU-B', expiryDate: addDays(REFERENCE_DATE, 15) }, // 2026-12-04
-      { id: 'LOT-C-01', skuId: 'SKU-C', expiryDate: null },
-    ],
-    units,
+    skus: [...HERO_SKUS, ...gen.skus],
+    lots: [...HERO_LOTS, ...gen.lots],
+    units: [...heroUnits(), ...gen.units],
     dailyDemand: [
-      ...dailySeries('SKU-A', 10), // 300 en 30 días
-      ...dailySeries('SKU-B', 4), // 120 en 30 días
-      // SKU-C: un único despacho antiguo, fuera de la ventana de 30 días.
-      { skuId: 'SKU-C', date: '2026-08-15', dispatchedBaseUnits: 20 },
+      ...dailySeries(HERO.MOCHILA, 10), // 300 en 30 días
+      ...dailySeries(HERO.TINTA, 4), // 120 en 30 días
+      // Calculadora: un único despacho antiguo, fuera de la ventana de 30 días.
+      { skuId: HERO.CALCULADORA, date: '2026-08-15', dispatchedBaseUnits: 20 },
+      ...gen.dailyDemand,
     ],
     internalTransfers: [
-      { skuId: 'SKU-A', date: '2026-11-10', baseUnits: 40, note: 'Transferencia interna Zona A -> Zona B (no es demanda)' },
+      { skuId: HERO.MOCHILA, date: '2026-11-10', baseUnits: 40, note: 'Transferencia interna Bodega Quito Norte → local Centro (no es demanda)' },
     ],
-    policies: [
-      { skuId: 'SKU-A', targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS },
-      { skuId: 'SKU-B', targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS },
-      { skuId: 'SKU-C', targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS },
-    ],
-  } satisfies SeedData);
+    policies: HERO_SKUS.map((s) => ({ skuId: s.id, targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS })),
+  };
+}
+
+const SEED: SeedData = buildSeed();
+
+/** Copia independiente de la semilla (cada reinicio parte del mismo estado). */
+export function createSeed(): SeedData {
+  return structuredClone(SEED);
 }

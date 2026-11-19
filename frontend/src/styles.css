@@ -106,8 +106,8 @@ p { margin: 0 0 10px; }
 .label3d-unit { font-size: 21px; font-weight: 800; color: var(--teal-900); background: rgba(255, 255, 255, 0.9); padding: 2px 8px; border-radius: 4px; }
 .label3d-unit.is-selected { outline: 3px solid var(--teal-900); background: var(--lime); }
 .label3d-unit.is-alert { background: var(--amber); color: #fff; }
-.label3d-ghost { font-size: 17px; font-weight: 700; color: #6b3f00; background: rgba(251, 239, 217, 0.95); border: 2px dashed var(--amber); padding: 3px 8px; border-radius: 4px; }
-.label3d-ghost small { font-weight: 500; font-size: 14px; }
+.label3d-ghost { white-space: nowrap; font-size: 13px; font-weight: 700; color: #6b3f00; background: rgba(251, 239, 217, 0.95); border: 2px dashed var(--amber); padding: 3px 8px; border-radius: 4px; }
+.label3d-ghost small { font-weight: 500; font-size: 12px; }
 
 /* Ficha flotante única del elemento enfocado */
 .callout {
@@ -120,24 +120,23 @@ p { margin: 0 0 10px; }
 .callout-title { font-weight: 800; font-size: 13px; color: var(--teal-900); }
 
 /* Vista 2D */
-.twin2d { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px; height: 100%; overflow: auto; }
+.twin2d { display: flex; flex-direction: column; gap: 10px; padding: 10px; height: 100%; overflow: auto; }
+.twin2d-notes { display: flex; flex-wrap: wrap; gap: 6px; }
+.twin2d-zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .twin2d-zone { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-.twin2d-zone h3 { margin: 0 0 6px; }
-.twin2d-racks { display: grid; gap: 8px; }
-.twin2d-rack { border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: var(--surface-2); }
-.twin2d-rack-name { font-weight: 700; font-size: 0.85rem; color: var(--teal-600); margin-bottom: 4px; }
-.twin2d-loc { border-top: 1px dashed var(--line-strong); padding: 5px 2px; display: flex; flex-direction: column; gap: 3px; min-height: 36px; }
-.twin2d-loc.is-expected { outline: 2px solid var(--blue); }
-.twin2d-loc.is-observed { outline: 2px dashed var(--amber); }
-.twin2d-loc-id { font-size: 0.74rem; color: var(--muted); }
-.unit-chip { text-align: left; border-radius: 4px; padding: 4px 6px; border: 1px solid transparent; cursor: pointer; color: #fff; font-weight: 650; font-size: 0.82rem; }
-.unit-chip.status-EXPECTED { background: var(--st-expected); color: var(--teal-900); }
-.unit-chip.status-OBSERVED { background: var(--st-observed); }
-.unit-chip.status-PENDING_VERIFICATION { background: var(--st-pending); }
-.unit-chip.status-CONFIRMED { background: var(--st-confirmed); }
-.unit-chip.is-selected { outline: 3px solid var(--teal-900); }
-.ghost-chip { font-size: 0.78rem; color: #6b3f00; background: var(--amber-soft); border: 1px dashed var(--amber); border-radius: 4px; padding: 2px 5px; }
-.expected-tag { font-size: 0.75rem; color: var(--blue); }
+.twin2d-zone h3 { margin: 0 0 6px; font-size: 0.86rem; }
+.twin2d-aisles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.twin2d-aisle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; position: relative; padding-bottom: 16px; }
+.twin2d-aisle-name { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-weight: 800; font-size: 0.75rem; color: var(--teal-600); }
+.twin2d-rack { border: 1px solid var(--line); border-radius: 4px; padding: 3px; background: var(--surface-2); }
+.twin2d-rack-name { font-weight: 700; font-size: 0.66rem; color: var(--muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; }
+.grid2d { display: grid; gap: 2px; }
+.cell2d { min-height: 18px; border-radius: 2px; border: 1px solid var(--line); background: var(--surface); font-size: 0.62rem; color: #fff; font-weight: 700; padding: 0; cursor: default; line-height: 1; }
+button.cell2d { cursor: pointer; border-color: transparent; }
+.cell2d.is-selected { outline: 2px solid var(--teal-900); outline-offset: 1px; }
+.cell2d.is-expected { outline: 2px solid var(--blue); outline-offset: 1px; }
+.cell2d.is-observed { outline: 2px dashed var(--amber); outline-offset: 1px; background: var(--amber-soft); color: #6b3f00; }
+.ghost-chip { font-size: 0.78rem; color: #6b3f00; background: var(--amber-soft); border: 1px dashed var(--amber); border-radius: 4px; padding: 3px 6px; }
 
 /* Panel derecho */
 .sidepanel { grid-area: side; background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }

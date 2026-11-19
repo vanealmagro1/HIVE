@@ -6,13 +6,18 @@ export type ISODateTime = string; // 'YYYY-MM-DDTHH:mm:ssZ'
 
 export interface Company { id: string; name: string }
 export interface Warehouse { id: string; companyId: string; name: string }
-export interface Zone { id: string; warehouseId: string; name: string }
-export interface Rack { id: string; zoneId: string; name: string }
+/** STORAGE = almacenamiento en racks; RECEIVING = andén de recepción con portal RFID. */
+export type ZoneKind = 'STORAGE' | 'RECEIVING';
+export interface Zone { id: string; warehouseId: string; name: string; kind?: ZoneKind; category?: string }
+/** aisle = número de pasillo (P1…); side = lado del pasillo (I izquierdo, D derecho). */
+export interface Rack { id: string; zoneId: string; name: string; aisle?: number; side?: 'I' | 'D' }
+/** slot = bahía dentro del rack (1…n). */
 export interface Location { id: string; rackId: string; level: number; slot: number }
 
 export interface SKU {
   id: string;
   name: string;
+  category?: string;
   unitCost: number; // USD por unidad base
   hasExpiry: boolean;
 }

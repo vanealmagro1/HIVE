@@ -41,9 +41,9 @@ export default function UnitPanel({ state, actions }: { state: DemoState; action
         <dt>Ubicación registrada</dt><dd><strong>{describeLocation(state, unit.expectedLocationId)}</strong></dd>
         <dt>Última lectura</dt>
         <dd className={mismatch ? 'text-warn' : undefined}>
-          {unit.observedLocationId
-            ? `${describeLocation(state, unit.observedLocationId)}${mismatch ? ' · distinta de la registrada' : ''}`
-            : 'Sin lecturas en esta sesión'}
+          {!unit.observedLocationId ? 'Sin lecturas registradas'
+            : mismatch ? `${describeLocation(state, unit.observedLocationId)} · distinta de la registrada`
+              : '✔ En su ubicación registrada'}
           {unit.lastObservedAt && <div className="muted small">{unit.lastObservedAt}</div>}
         </dd>
       </dl>

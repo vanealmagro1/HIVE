@@ -5,7 +5,7 @@ import type { DemoState } from './demoState';
 
 export const DEMO_UNIT_ID = 'PAL-001';
 export const DEMO_EVENT_ID = 'evt-demo-001';
-export const DEMO_RECOMMENDATION_ID = 'rec-sku-a';
+export const DEMO_RECOMMENDATION_ID = 'rec-moc-001';
 
 export const STATUS_LABEL: Record<VerificationStatus, string> = {
   EXPECTED: 'Sin lectura reciente',
@@ -34,7 +34,8 @@ export function placeName(state: DemoState, locationId: string | null): string {
   if (!loc) return locationId;
   const rack = state.racks.find((r) => r.id === loc.rackId);
   const zone = state.zones.find((z) => z.id === rack?.zoneId);
-  return `${loc.id} (${zone?.name ?? ''}, ${rack?.name ?? ''}, nivel ${loc.level})`;
+  if (!rack?.aisle) return `${loc.id} (${zone?.name ?? ''})`;
+  return `${loc.id} (${zone?.name ?? ''}, ${rack.name}, bahía ${loc.slot}, nivel ${loc.level})`;
 }
 
 export function eventSourceLabel(e: InventoryEvent): string {
@@ -80,7 +81,8 @@ export function describeLocation(state: DemoState, locationId: string | null): s
   if (!loc) return locationId;
   const rack = state.racks.find((r) => r.id === loc.rackId);
   const zone = state.zones.find((z) => z.id === rack?.zoneId);
-  return `${loc.id} · ${zone?.name ?? ''} · ${rack?.name ?? ''} · nivel ${loc.level}`;
+  if (!rack?.aisle) return `${loc.id} · ${zone?.name ?? ''} · posición ${loc.slot}`;
+  return `${loc.id} · ${zone?.name ?? ''} · ${rack.name} · bahía ${loc.slot} · nivel ${loc.level}`;
 }
 
 export function pallets(state: DemoState): LogisticUnit[] {

@@ -42,10 +42,10 @@ const TABS: { view: View; label: string }[] = [
 ];
 
 const STEP_HINT: Record<DemoStepId, string> = {
-  select: 'Haga clic en el pallet PAL-001 (Zona A · Rack A1 · nivel 1) o pulse el paso 1.',
-  event: 'Llega una lectura SIMULADA que asocia PAL-001 a LOC-B2. HIVE la registra como observación, no como traslado.',
+  select: 'Seleccione el pallet de mochilas PAL-001 (Zona A · pasillo 2) con un clic en la bodega o con el paso 1.',
+  event: 'Un lector RFID (simulado) detecta PAL-001 en el pasillo 4. HIVE lo registra como lectura, no como traslado.',
   alert: 'HIVE compara lo esperado con la evidencia y crea una alerta que requiere verificación humana.',
-  analytics: 'Cobertura y exceso estimado de SKU-A, con fórmulas y supuestos visibles.',
+  analytics: 'Mochilas: stock para 60 días frente a un objetivo de 30. HIVE calcula el dinero en riesgo.',
   approve: 'Al aprobar se crea una tarea para el equipo. El inventario no cambia.',
   done: 'Recorrido completo. Pulse “Reiniciar demo” para repetirlo.',
 };

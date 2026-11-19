@@ -1,32 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { createSeed } from './seed';
+import { createSeed, DEMO_OBSERVED_LOCATION } from './seed';
 import { hierarchyIssues, leafUnits, stockBySku } from '../domain/inventory';
 
-describe('semilla de demo', () => {
+describe('semilla de demo (bodega de papelería y tecnología, datos sintéticos)', () => {
   const seed = createSeed();
 
-  it('tiene la estructura mínima: 1 bodega, 3 zonas, 2 racks/zona, 3 niveles, ≥12 ubicaciones', () => {
-    expect(seed.zones).toHaveLength(3);
-    expect(seed.racks).toHaveLength(6);
-    for (const z of seed.zones) expect(seed.racks.filter((r) => r.zoneId === z.id)).toHaveLength(2);
-    for (const r of seed.racks) {
-      expect(seed.locations.filter((l) => l.rackId === r.id).map((l) => l.level).sort()).toEqual([1, 2, 3]);
-    }
-    expect(seed.locations.length).toBeGreaterThanOrEqual(12);
+  it('estructura: 3 zonas de almacenamiento + andén, 6 pasillos con rack a cada lado, 5 bahías × 3 niveles', () => {
+    const storage = seed.zones.filter((z) => z.kind === 'STORAGE');
+    expect(storage).toHaveLength(3);
+    expect(seed.zones.filter((z) => z.kind === 'RECEIVING')).toHaveLength(1);
+    const aisles = new Set(seed.racks.filter((r) => r.aisle).map((r) => r.aisle));
+    expect([...aisles].sort()).toEqual([1, 2, 3, 4, 5, 6]);
+    for (const a of aisles) expect(seed.racks.filter((r) => r.aisle === a).map((r) => r.side).sort()).toEqual(['D', 'I']);
+    for (const r of seed.racks.filter((x) => x.aisle)) expect(seed.locations.filter((l) => l.rackId === r.id)).toHaveLength(15);
+    expect(seed.locations.filter((l) => l.id.startsWith('REC-'))).toHaveLength(4);
     expect(new Set(seed.locations.map((l) => l.id)).size).toBe(seed.locations.length);
   });
 
-  it('tiene 8 pallets y 16 cajas, con PAL-001 esperado en LOC-A1 y LOC-B2 libre', () => {
-    expect(seed.units.filter((u) => u.type === 'PALLET')).toHaveLength(8);
-    expect(seed.units.filter((u) => u.type === 'BOX')).toHaveLength(16);
-    const pal = seed.units.find((u) => u.id === 'PAL-001')!;
-    expect(pal.expectedLocationId).toBe('LOC-A1');
-    expect(pal.verificationStatus).toBe('EXPECTED');
-    expect(seed.locations.some((l) => l.id === 'LOC-B2')).toBe(true);
-    expect(seed.units.some((u) => u.expectedLocationId === 'LOC-B2')).toBe(false);
+  it('tamaño del segmento objetivo: 10.000–20.000 unidades físicas y cientos de productos', () => {
+    const total = [...stockBySku(seed.units, seed.lots).values()].reduce((a, b) => a + b, 0);
+    expect(total).toBeGreaterThanOrEqual(10_000);
+    expect(total).toBeLessThanOrEqual(20_000);
+    expect(seed.skus.length).toBeGreaterThanOrEqual(200);
   });
 
-  it('todas las referencias son válidas (ubicaciones, lotes, padres)', () => {
+  it('es determinista: dos generaciones son idénticas', () => {
+    expect(createSeed()).toEqual(createSeed());
+  });
+
+  it('guion: PAL-001 (mochilas) registrado en P2-I03-N1, leído en el último inventario RFID; P4-D02-N2 libre', () => {
+    const pal = seed.units.find((u) => u.id === 'PAL-001')!;
+    expect(pal.expectedLocationId).toBe('P2-I03-N1');
+    expect(pal.verificationStatus).toBe('OBSERVED');
+    expect(pal.observedLocationId).toBe('P2-I03-N1');
+    expect(seed.units.some((u) => u.expectedLocationId === DEMO_OBSERVED_LOCATION)).toBe(false);
+    expect(seed.units.every((u) => !u.expectedLocationId.startsWith('REC-'))).toBe(true); // andén vacío
+  });
+
+  it('todas las referencias son válidas y los pallets cuadran con sus cajas', () => {
     const locIds = new Set(seed.locations.map((l) => l.id));
     const lotIds = new Set(seed.lots.map((l) => l.id));
     const unitIds = new Set(seed.units.map((u) => u.id));
@@ -35,17 +46,19 @@ describe('semilla de demo', () => {
       if (u.lotId) expect(lotIds.has(u.lotId)).toBe(true);
       if (u.parentId) expect(unitIds.has(u.parentId)).toBe(true);
     }
+    expect(unitIds.size).toBe(seed.units.length);
     expect(hierarchyIssues(seed.units)).toEqual([]);
   });
 
-  it('el stock por SKU suma solo cajas (sin doble conteo pallet + cajas)', () => {
+  it('el stock suma solo unidades hoja (sin doble conteo pallet + cajas); protagonistas exactos', () => {
     const stock = stockBySku(seed.units, seed.lots);
-    expect(stock.get('SKU-A')).toBe(600);
-    expect(stock.get('SKU-B')).toBe(120);
-    expect(stock.get('SKU-C')).toBe(200);
-    const naiveSum = seed.units.reduce((s, u) => s + u.quantityBaseUnits, 0);
-    expect(naiveSum).toBe(1840); // lo que daría el doble conteo (2 × 920)
+    expect(stock.get('MOC-001')).toBe(600);
+    expect(stock.get('TIN-001')).toBe(120);
+    expect(stock.get('CAL-001')).toBe(200);
     expect(leafUnits(seed.units).every((u) => u.type === 'BOX')).toBe(true);
+    const total = [...stock.values()].reduce((a, b) => a + b, 0);
+    const naive = seed.units.reduce((s, u) => s + u.quantityBaseUnits, 0);
+    expect(naive).toBeGreaterThan(total); // sumar pallets además de cajas daría de más
   });
 
   it('createSeed devuelve copias independientes (reset seguro)', () => {

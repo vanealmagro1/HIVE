@@ -23,8 +23,8 @@ function demandSeries(skuId: string, days: number, qty: number): DailyDemand[] {
   return Array.from({ length: days }, (_, i) => ({ skuId, date: addDays(REFERENCE_DATE, -(i + 1)), dispatchedBaseUnits: qty }));
 }
 
-describe('analítica SKU-A (sobrestock)', () => {
-  const a = analyticsFor('SKU-A');
+describe('analítica MOC-001 (sobrestock)', () => {
+  const a = analyticsFor('MOC-001');
   it('600 u / 10 u/día = 60 días; exceso 300 u; exposición USD 2400', () => {
     expect(a.stock).toBe(600);
     expect(a.dispatchedInWindow).toBe(300);
@@ -41,8 +41,8 @@ describe('analítica SKU-A (sobrestock)', () => {
   });
 });
 
-describe('analítica SKU-B (vencimiento)', () => {
-  const b = analyticsFor('SKU-B');
+describe('analítica TIN-001 (vencimiento)', () => {
+  const b = analyticsFor('TIN-001');
   it('120 u, 4 u/día, vence en 15 días -> 60 u remanentes y USD 720', () => {
     expect(b.stock).toBe(120);
     expect(b.dailyDemand).toBe(4);
@@ -54,8 +54,8 @@ describe('analítica SKU-B (vencimiento)', () => {
   });
 });
 
-describe('analítica SKU-C (sin datos suficientes)', () => {
-  const c = analyticsFor('SKU-C');
+describe('analítica CAL-001 (sin datos suficientes)', () => {
+  const c = analyticsFor('CAL-001');
   it('no inventa pronóstico ni riesgo de vencimiento', () => {
     expect(c.forecastAvailable).toBe(false);
     expect(c.insufficientDataMessage).toBe('Sin datos suficientes para pronosticar');

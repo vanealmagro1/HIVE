@@ -20,10 +20,11 @@ const has2D = await page.locator('[data-testid="warehouse-2d"]').count();
 console.log('canvas:', await page.locator('canvas').count(), '2D fallback:', has2D, 'load ms:', Date.now() - t0);
 await page.screenshot({ path: `${out}/01_bodega.png` });
 
-// Clic REAL sobre el pallet en la escena 3D (su ID está impreso en la cara frontal y no captura eventos).
-const label = page.locator('.label3d-unit', { hasText: 'PAL-001' }).first();
-const box = await label.boundingBox();
-await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+// Clic REAL sobre el pallet en la escena 3D (coordenadas de pantalla proyectadas desde la escena).
+const pt = await page.evaluate(() => window.__hiveProject?.('PAL-001'));
+await page.mouse.move(pt.x, pt.y);
+await page.waitForTimeout(400);
+await page.mouse.click(pt.x, pt.y);
 await page.waitForTimeout(1200);
 const selectedByClick = await page.locator('[data-testid="unit-panel"]').count();
 console.log('selección por clic 3D abre ficha:', selectedByClick === 1,
@@ -46,12 +47,12 @@ await page.getByRole('button', { name: /3 · Revisar alerta/ }).click();
 await page.waitForTimeout(300);
 await page.getByRole('button', { name: /4 · Ver predicción/ }).click();
 await page.waitForTimeout(600);
-console.log('SKU-A:', (await page.locator('[data-testid="analytics-SKU-A"] .metrics').textContent()));
+console.log('MOC-001:', (await page.locator('[data-testid="analytics-MOC-001"] .metrics').textContent()));
 await page.screenshot({ path: `${out}/04_prediccion.png` });
 
 await page.getByRole('button', { name: /5 · Aprobar recomendación/ }).click();
 await page.waitForTimeout(500);
-console.log('tarea:', await page.locator('[data-testid="task-task-rec-sku-a"]').count());
+console.log('tarea:', await page.locator('[data-testid="task-task-rec-moc-001"]').count());
 await page.screenshot({ path: `${out}/05_tarea.png` });
 
 await page.getByRole('button', { name: /Reiniciar demo/ }).click();

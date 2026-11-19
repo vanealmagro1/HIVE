@@ -11,8 +11,8 @@ export interface Scenario {
 export const SCENARIOS: Scenario[] = [
   {
     id: 'DEMO_MOVE_001',
-    title: 'Observación en ubicación distinta',
-    description: 'PAL-001 se observa en LOC-B2 aunque el registro lo espera en LOC-A1.',
+    title: 'Lectura en ubicación distinta',
+    description: 'El lector RFID detecta PAL-001 (mochilas) en el pasillo 4, aunque está registrado en el pasillo 2.',
     events: [{
       id: 'evt-demo-001',
       scenarioId: 'DEMO_MOVE_001',
@@ -21,14 +21,14 @@ export const SCENARIOS: Scenario[] = [
       receivedAt: '2026-11-19T09:15:02Z',
       unitId: 'PAL-001',
       type: 'OBSERVATION',
-      locationHintId: 'LOC-B2',
-      evidenceNote: 'Lectura SIMULADA de la etiqueta del pallet asociada a LOC-B2 (Zona B). No es una lectura RFID/BLE real ni confirma la posición exacta.',
+      locationHintId: 'P4-D02-N2',
+      evidenceNote: 'Lectura RFID SIMULADA de la etiqueta del pallet asociada a P4-D02-N2 (Zona B, pasillo 4). No es una lectura real ni confirma la posición exacta.',
     }],
   },
   {
     id: 'DEMO_MISSING_001',
     title: 'Ausencia de lectura',
-    description: 'PAL-007 no se lee en el recorrido simulado de la Zona C.',
+    description: 'PAL-007 (calculadoras) no responde en el recorrido simulado del pasillo 6.',
     events: [{
       id: 'evt-demo-002',
       scenarioId: 'DEMO_MISSING_001',
@@ -38,7 +38,7 @@ export const SCENARIOS: Scenario[] = [
       unitId: 'PAL-007',
       type: 'MISSED_READ',
       locationHintId: null,
-      evidenceNote: 'Recorrido SIMULADO de la Zona C sin lectura de PAL-007. La ausencia de lectura no implica pérdida.',
+      evidenceNote: 'Recorrido RFID SIMULADO del pasillo 6 sin lectura de PAL-007. La ausencia de lectura no implica pérdida.',
     }],
   },
 ];

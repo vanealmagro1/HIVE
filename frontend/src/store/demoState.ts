@@ -26,16 +26,28 @@ export interface DemoState extends SeedData {
   lastMessage: { kind: 'info' | 'warning' | 'error'; text: string } | null;
 }
 
-export function computeAnalytics(state: Pick<DemoState, 'skus' | 'lots' | 'units' | 'dailyDemand' | 'policies' | 'referenceDate'>): SkuAnalytics[] {
+type AnalyticsInput = Pick<DemoState, 'skus' | 'lots' | 'units' | 'dailyDemand' | 'policies' | 'referenceDate'>;
+let cache: { key: unknown[]; value: SkuAnalytics[] } | null = null;
+
+/** Analítica de todos los SKU. Memoizada por identidad de entradas (el estado es inmutable). */
+export function computeAnalytics(state: AnalyticsInput): SkuAnalytics[] {
+  const key = [state.skus, state.lots, state.units, state.dailyDemand, state.policies, state.referenceDate];
+  if (cache && cache.key.every((k, i) => k === key[i])) return cache.value;
   const byLot = stockByLot(state.units);
-  return state.skus.map((sku) => computeSkuAnalytics({
+  const lotsBySku = new Map<string, typeof state.lots>();
+  for (const l of state.lots) lotsBySku.set(l.skuId, [...(lotsBySku.get(l.skuId) ?? []), l]);
+  const demandBySku = new Map<string, typeof state.dailyDemand>();
+  for (const d of state.dailyDemand) demandBySku.set(d.skuId, [...(demandBySku.get(d.skuId) ?? []), d]);
+  const value = state.skus.map((sku) => computeSkuAnalytics({
     sku,
-    lots: state.lots,
+    lots: lotsBySku.get(sku.id) ?? [],
     stockByLot: byLot,
-    demand: state.dailyDemand,
+    demand: demandBySku.get(sku.id) ?? [],
     targetCoverageDays: state.policies.find((p) => p.skuId === sku.id)?.targetCoverageDays ?? 30,
     referenceDate: state.referenceDate,
   }));
+  cache = { key, value };
+  return value;
 }
 
 export function createInitialState(): DemoState {

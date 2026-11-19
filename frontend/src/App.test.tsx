@@ -24,8 +24,8 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     await user.click(screen.getByRole('button', { name: /1 · Seleccionar PAL-001/ }));
     const unitPanel = screen.getByTestId('unit-panel');
     expect(within(unitPanel).getByText(/Pallet PAL-001/)).toBeTruthy();
-    expect(within(unitPanel).getByText(/LOC-A1 · Zona A · Rack A1 · nivel 1/)).toBeTruthy();
-    expect(within(unitPanel).getByText(/SKU-A/)).toBeTruthy();
+    expect(within(unitPanel).getByText(/P2-I03-N1 · Zona A · Pasillo 2 izq. · bahía 3 · nivel 1/)).toBeTruthy();
+    expect(within(unitPanel).getByText('Mochila escolar básica')).toBeTruthy();
 
     // 2. Evento simulado
     await user.click(screen.getByRole('button', { name: /2 · Ejecutar evento simulado/ }));
@@ -34,7 +34,7 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     expect(within(alert).getByText('POR VERIFICAR')).toBeTruthy();
     expect(within(alert).getByText(/PAL-001 se leyó fuera de su ubicación/)).toBeTruthy();
     expect(within(alert).getAllByText('SIMULATED').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Leído aquí: PAL-001/)).toBeTruthy(); // marcador en LOC-B2 (2D)
+    expect(screen.getByText(/Leído aquí: PAL-001/)).toBeTruthy(); // marcador en P4-D02-N2 (2D)
 
     // Reenvío idempotente
     await user.click(screen.getByRole('button', { name: /Reenviar evento/ }));
@@ -48,16 +48,16 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
 
     // 4. Predicción
     await user.click(screen.getByRole('button', { name: /4 · Ver predicción/ }));
-    const a = screen.getByTestId('analytics-SKU-A');
+    const a = screen.getByTestId('analytics-MOC-001');
     expect(within(a).getAllByText('60 días').length).toBeGreaterThan(0);
     expect(within(a).getByText('300 unidades')).toBeTruthy();
     expect(within(a).getAllByText('USD 2.400').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('analytics-SKU-B')).getAllByText('USD 720').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('analytics-SKU-C')).getByText('Sin datos suficientes para pronosticar')).toBeTruthy();
+    expect(within(screen.getByTestId('analytics-TIN-001')).getAllByText('USD 720').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('analytics-CAL-001')).getByText('Sin datos suficientes para pronosticar')).toBeTruthy();
 
     // 5. Aprobar -> una sola tarea, stock intacto
     await user.click(screen.getByRole('button', { name: /5 · Aprobar recomendación/ }));
-    expect(screen.getByTestId('task-task-rec-sku-a')).toBeTruthy();
+    expect(screen.getByTestId('task-task-rec-moc-001')).toBeTruthy();
     expect(store.getState().tasks).toHaveLength(1);
     expect(inventoryTotals(store.getState())).toEqual(stockBefore);
     expect((screen.getByRole('button', { name: /5 · Aprobar recomendación/ }) as HTMLButtonElement).disabled).toBe(true);
@@ -66,7 +66,7 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     await user.click(screen.getByRole('button', { name: /Reiniciar demo/ }));
     expect(store.getState().alerts).toEqual([]);
     expect(store.getState().tasks).toEqual([]);
-    expect(store.getState().units.find((u) => u.id === 'PAL-001')!.observedLocationId).toBeNull();
+    expect(store.getState().units.find((u) => u.id === 'PAL-001')!.observedLocationId).toBe('P2-I03-N1');
     expect(screen.queryByText(/Leído aquí: PAL-001/)).toBeNull();
   });
 
@@ -78,7 +78,7 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     for (let i = 0; i < 5; i += 1) await user.click(next);
     const s = store.getState();
     expect(s.events.map((e) => e.id)).toEqual(['evt-demo-001']);
-    expect(s.tasks.map((t) => t.id)).toEqual(['task-rec-sku-a']);
+    expect(s.tasks.map((t) => t.id)).toEqual(['task-rec-moc-001']);
     expect((next as HTMLButtonElement).disabled).toBe(true);
   });
 

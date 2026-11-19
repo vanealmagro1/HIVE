@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../store/demoState';
 import { demoReducer } from '../../store/demoReducer';
 import { nextDemoStep } from '../../store/selectors';
-import { RACK_WIDTH, locationPositions, rackLayouts } from './layout';
+import { AISLE_W, FRONT_Z, PORTAL_Z, RACK_DEPTH, STORAGE_Z, aisleLayouts, locationPositions, rackLayouts } from './layout';
 
 describe('layout del gemelo (derivado del estado)', () => {
   const s = createInitialState();
@@ -13,19 +13,28 @@ describe('layout del gemelo (derivado del estado)', () => {
     expect(new Set([...pos.values()].map((p) => p.join(','))).size).toBe(s.locations.length);
   });
 
-  it('niveles más altos se dibujan más arriba y los racks no se superponen', () => {
-    expect(pos.get('LOC-A3')![1]).toBeGreaterThan(pos.get('LOC-A1')![1]);
-    const racks = rackLayouts(s.zones, s.racks);
-    expect(new Set(racks.map((r) => `${r.position[0]},${r.position[2]}`)).size).toBe(6);
+  it('niveles más altos se dibujan más arriba', () => {
+    expect(pos.get('P2-I03-N3')![1]).toBeGreaterThan(pos.get('P2-I03-N1')![1]);
   });
 
-  it('vistos de frente, ningún rack tapa a otro (fila única, sin solape en X)', () => {
-    const xs = rackLayouts(s.zones, s.racks).map((r) => r.position[0]).sort((a, b) => a - b);
-    for (let i = 1; i < xs.length; i += 1) expect(xs[i] - xs[i - 1]).toBeGreaterThan(RACK_WIDTH);
+  it('pasillos paralelos: racks a ambos lados sin solaparse y con pasillo libre entre ellos', () => {
+    const racks = rackLayouts(s.zones, s.racks).filter((r) => r.storage);
+    const xs = racks.map((r) => r.position[0]).sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i += 1) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(RACK_DEPTH);
+    for (const a of aisleLayouts(s.zones, s.racks)) {
+      const [i, d] = ['I', 'D'].map((side) => racks.find((r) => r.rack.aisle === a.aisle && r.rack.side === side)!.position[0]);
+      expect(d - i - RACK_DEPTH).toBeCloseTo(AISLE_W, 5);
+    }
   });
 
-  it('LOC-A1 (esperada) y LOC-B2 (observada) están en zonas distintas', () => {
-    expect(pos.get('LOC-A1')![0]).not.toBe(pos.get('LOC-B2')![0]);
+  it('el andén con el portal RFID está delante de los racks', () => {
+    expect(PORTAL_Z).toBeGreaterThan(STORAGE_Z);
+    expect(FRONT_Z).toBeGreaterThan(PORTAL_Z);
+    expect(pos.get('REC-01')![2]).toBeGreaterThan(pos.get('P1-I05-N1')![2]);
+  });
+
+  it('P2-I03-N1 (registrada) y P4-D02-N2 (leída) están en zonas distintas', () => {
+    expect(pos.get('P2-I03-N1')![0]).toBeLessThan(pos.get('P4-D02-N2')![0]);
   });
 });
 
@@ -41,7 +50,7 @@ describe('recorrido guiado derivado del estado', () => {
     expect(nextDemoStep(s)).toBe('analytics');
     s = demoReducer(s, { type: 'SET_VIEW', view: 'analytics' });
     expect(nextDemoStep(s)).toBe('approve');
-    s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-sku-a' });
+    s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-moc-001' });
     expect(nextDemoStep(s)).toBe('done');
   });
 });
