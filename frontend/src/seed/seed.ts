@@ -8,7 +8,7 @@
 //   CAL-001 Calculadora de bolsillo  200 u · un despacho antiguo → sin pronóstico; inmovilizado por regla
 import { addDays } from '../domain/dates';
 import { DEFAULT_TARGET_COVERAGE_DAYS, DEMAND_WINDOW_DAYS, REFERENCE_DATE } from '../domain/constants';
-import type { DailyDemand, Lot, LogisticUnit, SeedData, SKU } from '../domain/types';
+import type { DailyDemand, Lot, LogisticUnit, PurchaseOrder, SeedData, SKU } from '../domain/types';
 import { buildStructure, generateInventory, HERO, LAST_RFID_SWEEP, WAREHOUSE_ID } from './generator';
 
 /** Ubicación libre reservada para el guion: allí el lector de mano "encuentra" PAL-001. */
@@ -27,10 +27,36 @@ const HERO_PALLETS: PalletSpec[] = [
   { id: 'PAL-008', lotId: 'L-CAL-001', locationId: 'P6-D04-N2', boxes: 4, qty: 25 },
 ];
 
+/** Orden de compra que llega en el guion: 12 cajas de lápices de colores; el proveedor despacha 11. */
+export const DEMO_PO_ID = 'OC-2026-1187';
+export const DEMO_PO_MISSING_BOX = 'BOX-901-12';
+
+function demoPurchaseOrder(): PurchaseOrder {
+  return {
+    id: DEMO_PO_ID,
+    supplier: 'Proveedor Escolar del Pacífico S.A. (ficticio)',
+    skuId: 'COL-001',
+    lotId: 'L-COL-001-A',
+    palletId: 'PAL-901',
+    dockLocationId: 'REC-01',
+    expectedAt: '2026-11-19T08:00:00Z',
+    boxes: Array.from({ length: 12 }, (_, i) => ({
+      boxId: `BOX-901-${String(i + 1).padStart(2, '0')}`,
+      epc: `3034257BF400B7C000${String(1187).padStart(4, '0')}${String(i + 1).padStart(2, '0')}`,
+      qty: 24,
+    })),
+    status: 'EXPECTED',
+    receivedBoxIds: [],
+    readCount: 0,
+    closedAt: null,
+  };
+}
+
 const HERO_SKUS: SKU[] = [
   { id: HERO.MOCHILA, name: 'Mochila escolar básica', unitCost: 8, hasExpiry: false, category: 'UTI' },
   { id: HERO.TINTA, name: 'Cartucho de tinta negra original', unitCost: 12, hasExpiry: true, category: 'TIN' },
   { id: HERO.CALCULADORA, name: 'Calculadora básica de bolsillo', unitCost: 5, hasExpiry: false, category: 'TEC' },
+  { id: 'COL-001', name: 'Lápices de colores x12 · caja escolar', unitCost: 3.6, hasExpiry: false, category: 'ART' },
 ];
 
 const HERO_LOTS: Lot[] = [
@@ -38,6 +64,7 @@ const HERO_LOTS: Lot[] = [
   { id: 'L-MOC-001-B', skuId: HERO.MOCHILA, expiryDate: null },
   { id: 'L-TIN-001-A', skuId: HERO.TINTA, expiryDate: addDays(REFERENCE_DATE, 15) }, // 2026-12-04
   { id: 'L-CAL-001', skuId: HERO.CALCULADORA, expiryDate: null },
+  { id: 'L-COL-001-A', skuId: 'COL-001', expiryDate: null },
 ];
 
 function heroUnits(): LogisticUnit[] {
@@ -85,6 +112,7 @@ function buildSeed(): SeedData {
       { skuId: HERO.MOCHILA, date: '2026-11-10', baseUnits: 40, note: 'Transferencia interna Bodega Quito Norte → local Centro (no es demanda)' },
     ],
     policies: HERO_SKUS.map((s) => ({ skuId: s.id, targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS })),
+    purchaseOrders: [demoPurchaseOrder()],
   };
 }
 

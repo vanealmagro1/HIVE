@@ -8,7 +8,7 @@ import type {
 } from '../domain/types';
 import { createSeed } from '../seed/seed';
 
-export type View = 'twin' | 'inventory' | 'alerts' | 'analytics';
+export type View = 'twin' | 'rfid' | 'inventory' | 'alerts' | 'analytics';
 
 export interface AuditEntry { seq: number; message: string }
 
@@ -21,7 +21,8 @@ export interface DemoState extends SeedData {
   recommendations: Recommendation[];
   tasks: Task[];
   audit: AuditEntry[];
-  ui: { selectedUnitId: string | null; view: View; force2D: boolean };
+  /** playback: escenario cuyas lecturas se están reproduciendo en vivo (solo visualización). */
+  ui: { selectedUnitId: string | null; view: View; force2D: boolean; playback: string | null };
   /** Último resultado de una acción, para mostrar retroalimentación (p. ej. evento duplicado). */
   lastMessage: { kind: 'info' | 'warning' | 'error'; text: string } | null;
 }
@@ -62,7 +63,7 @@ export function createInitialState(): DemoState {
     recommendations: buildAnalyticsRecommendations(computeAnalytics(base)),
     tasks: [],
     audit: [{ seq: 1, message: 'Estado semilla cargado (datos sintéticos, fecha de referencia 2026-11-19).' }],
-    ui: { selectedUnitId: null, view: 'twin', force2D: false },
+    ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null },
     lastMessage: null,
   };
 }

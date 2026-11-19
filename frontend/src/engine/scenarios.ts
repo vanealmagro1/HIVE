@@ -1,5 +1,40 @@
 // Escenarios deterministas del simulador. Fuente SIEMPRE 'SIMULATED' y horas fijas (no se usa el reloj).
 import type { InventoryEvent } from '../domain/types';
+import { createSeed, DEMO_PO_ID, DEMO_PO_MISSING_BOX } from '../seed/seed';
+
+/** Recepción OC-2026-1187 por el portal del andén: se leen 11 de 12 cajas; 3 etiquetas las lee también la antena 2. */
+function receptionReads(): InventoryEvent[] {
+  const po = createSeed().purchaseOrders.find((p) => p.id === DEMO_PO_ID)!;
+  const reads: { boxId: string; epc: string; antenna: number }[] = [];
+  for (const b of po.boxes) {
+    if (b.boxId === DEMO_PO_MISSING_BOX) continue; // el proveedor no la despachó
+    reads.push({ ...b, antenna: 1 });
+    if (['BOX-901-03', 'BOX-901-07', 'BOX-901-10'].includes(b.boxId)) reads.push({ ...b, antenna: 2 });
+  }
+  return reads.map((r, i) => {
+    const sec = 2 + i;
+    const t = (s: number) => `2026-11-19T08:02:${String(s).padStart(2, '0')}Z`;
+    return {
+      id: `evt-rx-1187-${String(i + 1).padStart(2, '0')}`,
+      scenarioId: 'DEMO_RECEIPT_001',
+      source: 'SIMULATED',
+      capturedAt: t(sec),
+      receivedAt: t(sec + 1),
+      unitId: r.boxId,
+      type: 'RECEIPT_READ',
+      locationHintId: po.dockLocationId,
+      evidenceNote: `Lectura RFID SIMULADA del portal del andén (antena ${r.antenna}) para ${po.id}.`,
+      channel: 'RFID_PORTAL',
+      readerId: 'PORTAL-ANDEN-1',
+      antenna: r.antenna,
+      epc: r.epc,
+      rssi: -48 - ((i * 7) % 15),
+      purchaseOrderId: po.id,
+    } satisfies InventoryEvent;
+  });
+}
+
+export const RECEIPT_CLOSE_TIME = '2026-11-19T08:03:00Z';
 
 export interface Scenario {
   id: string;
@@ -9,6 +44,12 @@ export interface Scenario {
 }
 
 export const SCENARIOS: Scenario[] = [
+  {
+    id: 'DEMO_RECEIPT_001',
+    title: 'Recepción RFID de la OC-2026-1187',
+    description: 'El camión del proveedor pasa por el portal del andén: se leen 11 de las 12 cajas anunciadas.',
+    events: receptionReads(),
+  },
   {
     id: 'DEMO_MOVE_001',
     title: 'Lectura en ubicación distinta',

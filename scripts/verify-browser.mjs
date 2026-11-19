@@ -20,6 +20,16 @@ const has2D = await page.locator('[data-testid="warehouse-2d"]').count();
 console.log('canvas:', await page.locator('canvas').count(), '2D fallback:', has2D, 'load ms:', Date.now() - t0);
 await page.screenshot({ path: `${out}/01_bodega.png` });
 
+// Recepción RFID en vivo por el portal del andén (simulada).
+await page.getByRole('tab', { name: /RFID/ }).click();
+await page.getByRole('button', { name: /Pasar pallet por el portal/ }).click();
+await page.waitForTimeout(2600);
+await page.screenshot({ path: `${out}/01b_recepcion_en_curso.png` });
+await page.waitForSelector('[data-testid="receipt-result"]', { timeout: 20000 });
+console.log('recepción:', (await page.locator('[data-testid="receipt-result"]').textContent()).trim());
+await page.waitForTimeout(600);
+await page.screenshot({ path: `${out}/01c_recepcion_cerrada.png` });
+
 // Clic REAL sobre el pallet en la escena 3D (coordenadas de pantalla proyectadas desde la escena).
 const pt = await page.evaluate(() => window.__hiveProject?.('PAL-001'));
 await page.mouse.move(pt.x, pt.y);

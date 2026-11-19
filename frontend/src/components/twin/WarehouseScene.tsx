@@ -124,8 +124,37 @@ function RackFrames({ racks }: { racks: { position: Vec3 }[] }) {
   );
 }
 
-/** Andén: piso, franjas de seguridad, portal RFID (2 antenas + lector) y camión estacionado. */
-function Dock({ width }: { width: number }) {
+/** Destello del campo de lectura del portal cada vez que llega una lectura. */
+function PortalPulse({ readCount }: { readCount: number }) {
+  const field = useRef<THREE.MeshBasicMaterial>(null);
+  const antennas = useRef<THREE.MeshStandardMaterial[]>([]);
+  const last = useRef(-10);
+  const clock = useRef(0);
+  useEffect(() => { if (readCount > 0) last.current = clock.current; }, [readCount]);
+  useFrame((_, dt) => {
+    clock.current += dt;
+    const k = Math.max(0, 1 - (clock.current - last.current) / 0.45);
+    if (field.current) field.current.opacity = 0.05 + 0.45 * k;
+    for (const m of antennas.current) if (m) m.emissiveIntensity = 1.2 * k;
+  });
+  return (
+    <>
+      {[-1.7, 1.7].map((x, i) => (
+        <mesh key={x} position={[x - Math.sign(x) * 0.12, 1.5, 0]}>
+          <boxGeometry args={[0.06, 0.55, 0.55]} />
+          <meshStandardMaterial ref={(m) => { if (m) antennas.current[i] = m; }} color="#83aa48" emissive="#d4f28c" emissiveIntensity={0} />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.4, 0]} raycast={() => null}>
+        <boxGeometry args={[3.2, 2.7, 0.5]} />
+        <meshBasicMaterial ref={field} color="#d4f28c" transparent opacity={0.05} depthWrite={false} />
+      </mesh>
+    </>
+  );
+}
+
+/** Andén: piso, franjas de seguridad, portal RFID (2 antenas + lector) y camión del proveedor. */
+function Dock({ width, readCount, truck }: { width: number; readCount: number; truck: boolean }) {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, (DOCK_Z + FRONT_Z) / 2 - 0.9]}>
@@ -147,22 +176,21 @@ function Dock({ width }: { width: number }) {
       {/* Portal RFID en la puerta del andén */}
       <group position={[0, 0, PORTAL_Z]}>
         {[-1.7, 1.7].map((x) => (
-          <group key={x} position={[x, 0, 0]}>
-            <mesh position={[0, 1.4, 0]}><boxGeometry args={[0.14, 2.8, 0.14]} /><meshStandardMaterial color="#143c40" /></mesh>
-            <mesh position={[-Math.sign(x) * 0.12, 1.5, 0]}><boxGeometry args={[0.06, 0.55, 0.55]} /><meshStandardMaterial color="#83aa48" /></mesh>
-          </group>
+          <mesh key={x} position={[x, 1.4, 0]}><boxGeometry args={[0.14, 2.8, 0.14]} /><meshStandardMaterial color="#143c40" /></mesh>
         ))}
         <mesh position={[0, 2.85, 0]}><boxGeometry args={[3.55, 0.16, 0.18]} /><meshStandardMaterial color="#143c40" /></mesh>
         <mesh position={[1.95, 1.2, 0]}><boxGeometry args={[0.28, 0.36, 0.12]} /><meshStandardMaterial color="#267c71" /></mesh>
+        <PortalPulse readCount={readCount} />
       </group>
-      {/* Camión del proveedor */}
-      <group position={[0, 0, FRONT_Z + 3.4]}>
-        <mesh position={[0, 1.55, 0]}><boxGeometry args={[2.5, 2.6, 4.6]} /><meshStandardMaterial color="#f4f6f2" /></mesh>
-        <mesh position={[0, 1.1, 3.0]}><boxGeometry args={[2.4, 1.9, 1.4]} /><meshStandardMaterial color="#267c71" /></mesh>
-        {[-1.6, 1.6, 3.0].map((z) => [-1.1, 1.1].map((x) => (
-          <mesh key={`${x},${z}`} position={[x, 0.38, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.38, 0.38, 0.3, 16]} /><meshStandardMaterial color="#2b3535" /></mesh>
-        )))}
-      </group>
+      {truck && (
+        <group position={[0, 0, FRONT_Z + 3.4]}>
+          <mesh position={[0, 1.55, 0]}><boxGeometry args={[2.5, 2.6, 4.6]} /><meshStandardMaterial color="#f4f6f2" /></mesh>
+          <mesh position={[0, 1.1, 3.0]}><boxGeometry args={[2.4, 1.9, 1.4]} /><meshStandardMaterial color="#267c71" /></mesh>
+          {[-1.6, 1.6, 3.0].map((z) => [-1.1, 1.1].map((x) => (
+            <mesh key={`${x},${z}`} position={[x, 0.38, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.38, 0.38, 0.3, 16]} /><meshStandardMaterial color="#2b3535" /></mesh>
+          )))}
+        </group>
+      )}
     </group>
   );
 }
@@ -302,6 +330,9 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest }: Sce
   const alerting = unitsWithOpenAlerts(state);
   const isRisk = (u: LogisticUnit) => u.lotId !== null && expiryRiskLots.has(u.lotId);
   const width = zones.find((z) => z.zone.kind === 'RECEIVING')?.size[0] ?? 34;
+  const po = state.purchaseOrders[0];
+  const missing = po ? po.boxes.length - po.receivedBoxIds.length : 0;
+  const dockPos = po ? locPos.get(po.dockLocationId) : undefined;
 
   // Unidades leídas en una ubicación distinta de la registrada (evidencia, no traslado confirmado).
   const ghosts = state.units.filter((u) => !u.parentId && u.observedLocationId && u.observedLocationId !== u.expectedLocationId);
@@ -338,7 +369,15 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest }: Sce
           <FloorText text={`P${a.aisle}`} position={[a.x, 0.02, STORAGE_Z + RACK_LENGTH / 2 + 0.6]} height={0.85} color="rgba(38, 124, 113, 0.95)" />
         </group>
       ))}
-      <Dock width={width} />
+      <Dock width={width} readCount={po?.readCount ?? 0} truck={po?.status !== 'CLOSED'} />
+      {po && po.status === 'CLOSED' && missing > 0 && dockPos && (
+        <group position={[dockPos[0] + 0.25, dockPos[1] + 0.29 + 2 * 0.35, dockPos[2] + 0.29]}>
+          <mesh><boxGeometry args={[0.5, 0.36, 0.58]} /><meshBasicMaterial color="#c2412d" wireframe /></mesh>
+          <Html position={[0, 0.9, 0]} center pointerEvents="none" zIndexRange={[15, 5]}>
+            <div className="label3d-missing">Falta {missing} caja{missing > 1 ? 's' : ''} · {po.id}</div>
+          </Html>
+        </group>
+      )}
       <FloorText text="ANDÉN DE RECEPCIÓN · PORTAL RFID" position={[-9.5, 0.02, PORTAL_Z - 0.4]} height={0.7} />
 
       <RackFrames racks={storageRacks} />

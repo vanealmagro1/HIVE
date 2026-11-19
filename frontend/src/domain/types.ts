@@ -54,7 +54,16 @@ export interface LogisticUnit {
 }
 
 export type EventSource = 'SIMULATED' | 'BLE' | 'RFID_FUTURE';
-export type InventoryEventType = 'OBSERVATION' | 'MISSED_READ';
+/**
+ * OBSERVATION: una etiqueta se leyó asociada a una ubicación. MISSED_READ: no respondió en un recorrido.
+ * RECEIPT_READ: el portal del andén leyó una etiqueta de una orden de compra en recepción.
+ */
+export type InventoryEventType = 'OBSERVATION' | 'MISSED_READ' | 'RECEIPT_READ';
+/**
+ * Canal de captura. Hoy todos los eventos son SIMULADOS; los mismos canales se conectarán a equipos reales:
+ * portal fijo (lector + antenas en el andén), lector de mano RFID y, más adelante, beacons BLE.
+ */
+export type ReadChannel = 'RFID_PORTAL' | 'RFID_HANDHELD' | 'BLE_BEACON';
 
 export interface InventoryEvent {
   id: string;
@@ -66,9 +75,16 @@ export interface InventoryEvent {
   type: InventoryEventType;
   locationHintId: string | null;
   evidenceNote: string;
+  channel?: ReadChannel;
+  readerId?: string;
+  antenna?: number;
+  /** Código EPC de la etiqueta leída. */
+  epc?: string;
+  rssi?: number;
+  purchaseOrderId?: string;
 }
 
-export type DiscrepancyKind = 'LOCATION_MISMATCH' | 'NOT_OBSERVED';
+export type DiscrepancyKind = 'LOCATION_MISMATCH' | 'NOT_OBSERVED' | 'RECEIPT_SHORTAGE';
 
 export interface Discrepancy {
   id: string;
@@ -95,7 +111,7 @@ export interface Alert {
   createdAt: ISODateTime;
 }
 
-export type RecommendationType = 'REVIEW_EXCESS' | 'PRIORITIZE_FEFO' | 'VERIFY_LOCATION';
+export type RecommendationType = 'REVIEW_EXCESS' | 'PRIORITIZE_FEFO' | 'VERIFY_LOCATION' | 'CLAIM_SHORTAGE';
 export type RecommendationStatus = 'PROPOSED' | 'APPROVED' | 'REJECTED';
 
 export interface Recommendation {
@@ -126,6 +142,26 @@ export interface InternalTransfer { skuId: string; date: ISODate; baseUnits: num
 
 export interface SkuPolicy { skuId: string; targetCoverageDays: number }
 
+/** Caja anunciada por el proveedor (aviso de envío): su etiqueta EPC y su contenido. */
+export interface AsnBox { boxId: string; epc: string; qty: number }
+
+/** Orden de compra en recepción. El inventario solo suma las cajas cuya etiqueta se leyó. */
+export interface PurchaseOrder {
+  id: string;
+  supplier: string;
+  skuId: string;
+  lotId: string;
+  palletId: string;
+  dockLocationId: string;
+  expectedAt: ISODateTime;
+  boxes: AsnBox[];
+  status: 'EXPECTED' | 'RECEIVING' | 'CLOSED';
+  receivedBoxIds: string[];
+  /** Lecturas totales (incluye lecturas repetidas de la misma etiqueta). */
+  readCount: number;
+  closedAt: ISODateTime | null;
+}
+
 export interface SeedData {
   company: Company;
   warehouse: Warehouse;
@@ -138,4 +174,5 @@ export interface SeedData {
   dailyDemand: DailyDemand[];
   internalTransfers: InternalTransfer[];
   policies: SkuPolicy[];
+  purchaseOrders: PurchaseOrder[];
 }

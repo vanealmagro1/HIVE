@@ -1,5 +1,6 @@
 // Reducer puro: todas las mutaciones de la demo pasan por aquí.
-import { processEvent } from '../engine/eventProcessor';
+import { ingestEvent } from '../engine/ingest';
+import { closeReceipt } from '../engine/receiving';
 import { getScenario } from '../engine/scenarios';
 import type { AlertStatus, InventoryEvent, Task } from '../domain/types';
 import { appendAudit, createInitialState, type DemoState, type View } from './demoState';
@@ -13,7 +14,9 @@ export type DemoAction =
   | { type: 'RUN_SCENARIO'; scenarioId: string }
   | { type: 'APPROVE_RECOMMENDATION'; recommendationId: string }
   | { type: 'REJECT_RECOMMENDATION'; recommendationId: string }
-  | { type: 'SET_ALERT_STATUS'; alertId: string; status: AlertStatus };
+  | { type: 'SET_ALERT_STATUS'; alertId: string; status: AlertStatus }
+  | { type: 'CLOSE_RECEIPT'; purchaseOrderId: string; closedAt: string }
+  | { type: 'SET_PLAYBACK'; scenarioId: string | null };
 
 const TASK_OWNER = 'Supervisor de inventarios (demo)';
 
@@ -64,11 +67,15 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
     case 'SET_FORCE_2D':
       return { ...state, ui: { ...state.ui, force2D: action.value } };
     case 'POST_EVENT':
-      return processEvent(state, action.event).state;
+      return ingestEvent(state, action.event).state;
     case 'RUN_SCENARIO': {
       const scenario = getScenario(action.scenarioId);
-      return scenario.events.reduce((s, e) => processEvent(s, e).state, state);
+      return scenario.events.reduce((s, e) => ingestEvent(s, e).state, state);
     }
+    case 'CLOSE_RECEIPT':
+      return closeReceipt(state, action.purchaseOrderId, action.closedAt);
+    case 'SET_PLAYBACK':
+      return { ...state, ui: { ...state.ui, playback: action.scenarioId } };
     case 'APPROVE_RECOMMENDATION':
       return approve(state, action.recommendationId);
     case 'REJECT_RECOMMENDATION':

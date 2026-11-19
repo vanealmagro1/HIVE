@@ -38,8 +38,11 @@ export function placeName(state: DemoState, locationId: string | null): string {
   return `${loc.id} (${zone?.name ?? ''}, ${rack.name}, bahía ${loc.slot}, nivel ${loc.level})`;
 }
 
+const CHANNEL_LABEL = { RFID_PORTAL: 'Portal RFID del andén', RFID_HANDHELD: 'Lector de mano RFID', BLE_BEACON: 'Beacon BLE' } as const;
+
 export function eventSourceLabel(e: InventoryEvent): string {
-  return e.source === 'SIMULATED' ? 'Lectura RFID simulada' : `Lectura ${e.source}`;
+  const base = e.channel ? CHANNEL_LABEL[e.channel] : 'Lectura RFID';
+  return `${base}${e.antenna ? ` · antena ${e.antenna}` : ''}${e.source === 'SIMULATED' ? ' (simulada)' : ''}`;
 }
 
 /** Unidades y valor de una unidad logística (para un pallet: contenido declarado). */
@@ -63,6 +66,22 @@ export function alertStory(state: DemoState, alert: Alert): AlertStory {
       ...value,
       next: 'Verificar físicamente ambas ubicaciones. HIVE no mueve el stock ni da por perdido el pallet hasta que una persona lo confirme.',
     };
+  }
+  if (alert.type === 'RECEIPT_SHORTAGE') {
+    const po = state.purchaseOrders.find((p) => p.palletId === alert.unitId);
+    if (po) {
+      const missing = po.boxes.filter((b) => !po.receivedBoxIds.includes(b.boxId));
+      const qty = missing.reduce((s, b) => s + b.qty, 0);
+      const skuName = state.skus.find((s) => s.id === po.skuId)?.name ?? po.skuId;
+      const cost = state.skus.find((s) => s.id === po.skuId)?.unitCost ?? 0;
+      return {
+        title: `Faltan ${missing.length} de ${po.boxes.length} cajas en la recepción ${po.id}`,
+        detail: `${skuName} · ${po.supplier}. El portal RFID leyó ${po.receivedBoxIds.length} cajas; no respondió ${missing.map((m) => m.boxId).join(', ')}.`,
+        units: qty,
+        usd: Math.round(qty * cost * 100) / 100,
+        next: 'Contar el pallet antes de firmar la guía. Si se confirma, reclamar al proveedor: el inventario ya registra solo lo recibido.',
+      };
+    }
   }
   if (alert.type === 'NOT_OBSERVED' && unit) {
     return {

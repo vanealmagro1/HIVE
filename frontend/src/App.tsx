@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { createActions } from './components/actions';
 import AlertsPanel from './components/panels/AlertsPanel';
 import AnalyticsPanel from './components/panels/AnalyticsPanel';
+import RfidPanel from './components/panels/RfidPanel';
 import InventoryPanel from './components/panels/InventoryPanel';
 import UnitPanel from './components/panels/UnitPanel';
 import TwinView from './components/twin/TwinView';
@@ -26,7 +27,7 @@ function Kpis({ state }: { state: DemoState }) {
   return (
     <section className="kpis" aria-label="Indicadores de la bodega">
       <div className="kpi"><div className="kpi-label">Unidades en bodega</div><div className="kpi-value" data-testid="kpi-units">{formatNumber(units)}</div><div className="kpi-sub">{state.skus.length} productos (SKU)</div></div>
-      <div className="kpi"><div className="kpi-label">Valor del inventario</div><div className="kpi-value">{formatUsd(value)}</div><div className="kpi-sub">a costo</div></div>
+      <div className="kpi"><div className="kpi-label">Valor del inventario</div><div className="kpi-value">{formatUsd(Math.round(value))}</div><div className="kpi-sub">a costo</div></div>
       <div className="kpi"><div className="kpi-label">Lecturas RFID</div><div className="kpi-value">{formatNumber(state.events.length)}</div><div className="kpi-sub">en esta sesión (simuladas)</div></div>
       <div className={`kpi${open.length ? ' is-alert' : ''}`}><div className="kpi-label">Alertas abiertas</div><div className="kpi-value">{open.length}</div><div className="kpi-sub">{open.length ? `${formatUsd(atRisk)} por verificar` : 'todo conciliado'}</div></div>
       <div className="kpi"><div className="kpi-label">Tareas abiertas</div><div className="kpi-value">{tasks}</div><div className="kpi-sub">aprobadas por una persona</div></div>
@@ -35,6 +36,7 @@ function Kpis({ state }: { state: DemoState }) {
 }
 
 const TABS: { view: View; label: string }[] = [
+  { view: 'rfid', label: 'RFID' },
   { view: 'twin', label: 'Detalle' },
   { view: 'inventory', label: 'Inventario' },
   { view: 'alerts', label: 'Alertas' },
@@ -83,7 +85,7 @@ export default function App({ store = demoStore }: { store?: DemoStore }) {
       <Kpis state={state} />
 
       <main className="center">
-        <TwinView state={state} onSelect={actions.select} onToggle2D={actions.setForce2D} />
+        <TwinView state={state} onSelect={actions.selectFromMap} onToggle2D={actions.setForce2D} />
       </main>
 
       <aside className="sidepanel">
@@ -103,6 +105,7 @@ export default function App({ store = demoStore }: { store?: DemoStore }) {
           ))}
         </div>
         <div className="tab-body" role="tabpanel" aria-live="polite">
+          {state.ui.view === 'rfid' && <RfidPanel state={state} actions={actions} />}
           {state.ui.view === 'twin' && <UnitPanel state={state} actions={actions} />}
           {state.ui.view === 'inventory' && <InventoryPanel state={state} actions={actions} />}
           {state.ui.view === 'alerts' && <AlertsPanel state={state} actions={actions} />}

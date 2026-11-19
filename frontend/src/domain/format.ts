@@ -6,4 +6,8 @@ export function formatNumber(value: number, decimals = 0): string {
   return `${value < 0 ? '-' : ''}${grouped}${dec ? `,${dec}` : ''}`;
 }
 
-export const formatUsd = (value: number): string => `USD ${formatNumber(value)}`;
+/** Montos en USD: sin decimales si son enteros (USD 2.400), con centavos si no (USD 86,40). */
+export const formatUsd = (value: number): string => {
+  const cents = Math.round(value * 100) / 100;
+  return `USD ${formatNumber(cents, Number.isInteger(cents) ? 0 : 2)}`;
+};

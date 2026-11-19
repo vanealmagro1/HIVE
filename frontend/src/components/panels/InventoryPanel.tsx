@@ -8,7 +8,7 @@ const PAGE = 20;
 
 /** Zona de almacenamiento de cada familia de productos (prefijo del SKU). */
 const FAMILY_ZONE: Record<string, string> = {
-  CUA: 'Z-A', ESC: 'Z-A', ART: 'Z-A', UTI: 'Z-A', MOC: 'Z-A',
+  CUA: 'Z-A', ESC: 'Z-A', ART: 'Z-A', UTI: 'Z-A', MOC: 'Z-A', COL: 'Z-A',
   TEC: 'Z-B', ACC: 'Z-B', CAL: 'Z-B',
   RES: 'Z-C', OFI: 'Z-C', TIN: 'Z-C',
 };
