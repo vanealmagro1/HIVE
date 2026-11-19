@@ -8,19 +8,14 @@ import { Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { LogisticUnit, VerificationStatus } from '../../domain/types';
+import type { LogisticUnit } from '../../domain/types';
+import { STATUS_COLOR } from './colors';
 import type { DemoState } from '../../store/demoState';
 import { STATUS_ICON, STATUS_LABEL, skuOfUnit, unitsWithOpenAlerts } from '../../store/selectors';
 import {
   LEVEL_HEIGHT, RACK_DEPTH, RACK_WIDTH, ZONE_DEPTH, locationPositions, rackLayouts, zoneLayouts, type Vec3,
 } from './layout';
 
-export const STATUS_COLOR: Record<VerificationStatus, string> = {
-  EXPECTED: '#8aa1b8',
-  OBSERVED: '#3fa56b',
-  PENDING_VERIFICATION: '#e09a1a',
-  CONFIRMED: '#2f7fd1',
-};
 
 const CAMERA_HOME: Vec3 = [0, 6.9, 16.6];
 const TARGET_HOME: Vec3 = [0, 2.6, 0];
@@ -46,7 +41,7 @@ function Rack3D({ position, name }: { position: Vec3; name: string }) {
       {posts.map((p, i) => (
         <mesh key={i} position={p}>
           <boxGeometry args={[0.08, RACK_HEIGHT, 0.08]} />
-          <meshStandardMaterial color="#3b6ea8" />
+          <meshStandardMaterial color="#214d51" />
         </mesh>
       ))}
       {[0, 1, 2, 3].map((lvl) => (
@@ -58,7 +53,7 @@ function Rack3D({ position, name }: { position: Vec3; name: string }) {
       {/* Letrero del rack, pegado al travesaño superior. */}
       <mesh position={[0, RACK_HEIGHT + 0.32, RACK_DEPTH / 2]}>
         <boxGeometry args={[1.3, 0.42, 0.04]} />
-        <meshStandardMaterial color="#1f4f86" />
+        <meshStandardMaterial color="#143c40" />
       </mesh>
       <Html transform distanceFactor={FACE_DF} pointerEvents="none" position={[0, RACK_HEIGHT + 0.32, RACK_DEPTH / 2 + 0.03]} style={{ pointerEvents: 'none' }}>
         <div className="face-label face-rack">{name}</div>
@@ -102,7 +97,7 @@ function Pallet3D({
       {selected && (
         <mesh position={[0, 0.5, 0]}>
           <boxGeometry args={[2.0, 1.15, 1.35]} />
-          <meshBasicMaterial color="#ffffff" wireframe />
+          <meshBasicMaterial color="#143c40" wireframe />
         </mesh>
       )}
       {/* ID impreso en la cara frontal del pallet. */}
@@ -128,7 +123,7 @@ function ObservationGhost({ position, unitId, locationId }: { position: Vec3; un
       </mesh>
       <Html transform distanceFactor={FACE_DF} pointerEvents="none" position={[0, 0.5, 0.6]} style={{ pointerEvents: 'none' }}>
         <div className="face-label label3d-ghost">
-          ◇ Observación de {unitId}<br /><small>evidencia simulada · {locationId}</small>
+          ◇ Leído aquí: {unitId}<br /><small>lectura RFID simulada · {locationId}</small>
         </div>
       </Html>
     </group>
@@ -139,7 +134,7 @@ function ExpectedMarker({ position }: { position: Vec3 }) {
   return (
     <mesh position={[position[0], position[1] + 0.5, position[2]]}>
       <boxGeometry args={[2.15, 1.2, 1.4]} />
-      <meshBasicMaterial color="#2f7fd1" wireframe />
+      <meshBasicMaterial color="#2f6fb0" wireframe />
     </mesh>
   );
 }
@@ -153,7 +148,7 @@ function FloorText({ text, position }: { text: string; position: Vec3 }) {
     if (ctx) {
       ctx.font = '900 84px "Segoe UI", system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(240, 180, 41, 0.95)';
+      ctx.fillStyle = 'rgba(20, 60, 64, 0.85)';
       ctx.fillText(text, 256, 68);
     }
     const t = new THREE.CanvasTexture(canvas);
@@ -180,11 +175,11 @@ function UnitCallout({ state, unit, position, alert, expiryRisk }: {
     <Html position={[position[0], RACK_HEIGHT + 1.45, position[2]]} center style={{ pointerEvents: 'none' }} zIndexRange={[20, 10]}>
       <div className={`callout${alert ? ' is-alert' : ''}`} data-testid="unit-callout">
         <div className="callout-title">{unit.id} · {sku?.id ?? '—'} · {qty} u</div>
-        <div>Esperado: <strong>{unit.expectedLocationId}</strong>
-          {observedElsewhere && <> · Observado: <strong>{unit.observedLocationId}</strong></>}
+        <div>Registrado: <strong>{unit.expectedLocationId}</strong>
+          {observedElsewhere && <> · Leído en: <strong>{unit.observedLocationId}</strong></>}
         </div>
         <div>{STATUS_ICON[unit.verificationStatus]} {STATUS_LABEL[unit.verificationStatus]}</div>
-        {expiryRisk && <div>⏳ Lote con riesgo de vencimiento</div>}
+        {expiryRisk && <div>⏳ Lote que vence pronto</div>}
       </div>
     </Html>
   );
@@ -227,20 +222,20 @@ function SceneContent({ state, expiryRiskLots, onSelect, resetViewRequest }: Sce
 
   return (
     <>
-      <color attach="background" args={['#1b2330']} />
-      <ambientLight intensity={0.75} />
+      <color attach="background" args={['#e6ece6']} />
+      <ambientLight intensity={0.95} />
       <directionalLight position={[10, 18, 8]} intensity={1.3} />
       <directionalLight position={[-12, 10, -6]} intensity={0.35} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
         <planeGeometry args={[30, 9]} />
-        <meshStandardMaterial color="#39424f" />
+        <meshStandardMaterial color="#cfd9d1" />
       </mesh>
       {zones.map(({ zone, center, size }) => (
         <group key={zone.id}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center[0], 0.005, center[2]]}>
             <planeGeometry args={size} />
-            <meshStandardMaterial color="#465262" />
+            <meshStandardMaterial color="#bfcdc3" />
           </mesh>
           {/* Rótulo pintado en el piso, delante de los racks. */}
           <FloorText text={zone.name.toUpperCase()} position={[center[0], 0.02, ZONE_DEPTH / 2 - 0.6]} />

@@ -1,17 +1,20 @@
 import { unitDetail } from '../../domain/inventory';
 import { formatNumber, formatUsd } from '../../domain/format';
 import type { DemoState } from '../../store/demoState';
-import { describeLocation, STATUS_ICON, STATUS_LABEL } from '../../store/selectors';
+import { describeLocation, eventSourceLabel, STATUS_ICON, STATUS_LABEL } from '../../store/selectors';
 import type { Actions } from '../actions';
 
 export default function UnitPanel({ state, actions }: { state: DemoState; actions: Actions }) {
   const id = state.ui.selectedUnitId;
   const detail = id ? unitDetail(state.units, state.lots, state.skus, id) : null;
   if (!detail) {
+    const pallets = state.units.filter((u) => u.type === 'PALLET').length;
+    const boxes = state.units.filter((u) => u.type === 'BOX').length;
     return (
       <div className="panel-empty">
-        <p>Seleccione un pallet en la escena 3D (o use <strong>1 · Seleccionar PAL-001</strong>).</p>
-        <p className="muted">8 pallets y 16 cajas sintéticas en 3 zonas, 6 racks y 18 ubicaciones.</p>
+        <h2>Detalle</h2>
+        <p>Haga clic en un pallet de la bodega para ver qué contiene, dónde está registrado y su última lectura RFID.</p>
+        <p className="muted small">{pallets} pallets y {boxes} cajas con etiqueta RFID en {state.zones.length} zonas y {state.locations.length} ubicaciones.</p>
       </div>
     );
   }
@@ -21,31 +24,33 @@ export default function UnitPanel({ state, actions }: { state: DemoState; action
 
   return (
     <div className="unit-panel" data-testid="unit-panel">
+      <div className="eyebrow">{unit.type === 'PALLET' ? 'Pallet' : 'Caja'} con etiqueta RFID</div>
       <h2>{unit.type === 'PALLET' ? 'Pallet' : 'Caja'} {unit.id}</h2>
       <div className={`status-badge status-${unit.verificationStatus}`}>
         {STATUS_ICON[unit.verificationStatus]} {STATUS_LABEL[unit.verificationStatus]}
       </div>
       <dl className="kv">
-        <dt>SKU</dt><dd>{sku ? `${sku.id} · ${sku.name}` : '—'}</dd>
-        <dt>Lote</dt><dd>{lot?.id ?? '—'}</dd>
-        <dt>Vencimiento</dt><dd>{lot?.expiryDate ?? 'Sin caducidad'}</dd>
+        <dt>Producto</dt><dd>{sku ? <><strong>{sku.name}</strong> <span className="muted">· {sku.id}</span></> : '—'}</dd>
         <dt>Cantidad</dt>
         <dd>
           {formatNumber(unit.quantityBaseUnits)} u
-          {unit.type === 'PALLET' && children.length > 0 && <span className="muted"> (contenido declarado = suma de {children.length} cajas)</span>}
+          {unit.type === 'PALLET' && children.length > 0 && <span className="muted"> en {children.length} cajas</span>}
         </dd>
-        <dt>Costo / valor</dt><dd>{sku ? `${formatUsd(sku.unitCost)} / u · ${formatUsd(unit.quantityBaseUnits * sku.unitCost)}` : '—'}</dd>
-        <dt>Ubicación esperada</dt><dd><strong>{describeLocation(state, unit.expectedLocationId)}</strong></dd>
-        <dt>Ubicación observada</dt>
+        <dt>Valor</dt><dd>{sku ? `${formatUsd(unit.quantityBaseUnits * sku.unitCost)} (${formatUsd(sku.unitCost)} / u)` : '—'}</dd>
+        <dt>Lote · vence</dt><dd>{lot?.id ?? '—'} · {lot?.expiryDate ?? 'Sin caducidad'}</dd>
+        <dt>Ubicación registrada</dt><dd><strong>{describeLocation(state, unit.expectedLocationId)}</strong></dd>
+        <dt>Última lectura</dt>
         <dd className={mismatch ? 'text-warn' : undefined}>
-          {unit.observedLocationId ? `${describeLocation(state, unit.observedLocationId)} (evidencia, no confirmada)` : 'Sin observación registrada'}
+          {unit.observedLocationId
+            ? `${describeLocation(state, unit.observedLocationId)}${mismatch ? ' · distinta de la registrada' : ''}`
+            : 'Sin lecturas en esta sesión'}
+          {unit.lastObservedAt && <div className="muted small">{unit.lastObservedAt}</div>}
         </dd>
-        <dt>Última observación</dt><dd>{unit.lastObservedAt ?? '—'}</dd>
       </dl>
       {children.length > 0 && (
-        <>
-          <h3>Cajas hijas</h3>
-          <ul className="plain-list">
+        <details>
+          <summary>Cajas del pallet ({children.length})</summary>
+          <ul className="plain-list small">
             {children.map((c) => (
               <li key={c.id}>
                 <button type="button" className="link-btn" onClick={() => actions.select(c.id)}>{c.id}</button>
@@ -53,19 +58,19 @@ export default function UnitPanel({ state, actions }: { state: DemoState; action
               </li>
             ))}
           </ul>
-          <p className="muted small">Una lectura del pallet no verifica individualmente sus cajas. El stock del SKU suma cajas; el pallet no se suma de nuevo.</p>
-        </>
+          <p className="muted small">El stock se calcula sumando las cajas; el pallet no se vuelve a sumar.</p>
+        </details>
       )}
       {unit.parentId && (
         <p>Pertenece a <button type="button" className="link-btn" onClick={() => actions.select(unit.parentId!)}>{unit.parentId}</button></p>
       )}
-      <h3>Evidencia</h3>
-      {evidence.length === 0 ? <p className="muted">Sin eventos para esta unidad.</p> : (
-        <ul className="plain-list">
+      <h3>Lecturas</h3>
+      {evidence.length === 0 ? <p className="muted small">Sin lecturas registradas en esta sesión.</p> : (
+        <ul className="plain-list small">
           {evidence.map((e) => (
             <li key={e.id}>
-              <span className="source-tag">{e.source}</span> <code>{e.id}</code> · {e.type === 'OBSERVATION' ? `observación en ${e.locationHintId}` : 'sin lectura'}
-              <div className="muted small">Captura {e.capturedAt} · recepción {e.receivedAt}</div>
+              <span className="source-tag">{e.source}</span> {eventSourceLabel(e)} · {e.type === 'OBSERVATION' ? `leído en ${e.locationHintId}` : 'sin respuesta'}
+              <div className="muted">{e.capturedAt} · <code>{e.id}</code></div>
             </li>
           ))}
         </ul>

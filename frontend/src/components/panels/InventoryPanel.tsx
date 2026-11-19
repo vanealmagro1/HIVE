@@ -11,15 +11,16 @@ export default function InventoryPanel({ state, actions }: { state: DemoState; a
 
   return (
     <div data-testid="inventory-panel">
-      <h2>Inventario esperado (registro)</h2>
+      <h2>Inventario</h2>
+      <p className="panel-intro">Stock registrado por producto. Cada caja lleva una etiqueta RFID; el stock suma cajas y nunca vuelve a sumar el pallet.</p>
       <table className="table">
         <thead>
-          <tr><th>SKU</th><th className="num">Stock (u)</th><th className="num">Costo</th><th className="num">Valor</th><th>Lotes · venc.</th></tr>
+          <tr><th>Producto</th><th className="num">Stock (u)</th><th className="num">Costo</th><th className="num">Valor</th><th>Lotes · venc.</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.skuId}>
-              <td><strong>{r.skuId}</strong><div className="muted small">{r.skuName}</div></td>
+              <td><strong>{r.skuName}</strong><div className="muted small">{r.skuId}</div></td>
               <td className="num">{formatNumber(r.stockBaseUnits)}</td>
               <td className="num">{formatUsd(r.unitCost)}</td>
               <td className="num">{formatUsd(r.valueUsd)}</td>
@@ -31,18 +32,17 @@ export default function InventoryPanel({ state, actions }: { state: DemoState; a
           <tr><td>Total</td><td className="num">{formatNumber(totalUnits)}</td><td /><td className="num">{formatUsd(totalValue)}</td><td /></tr>
         </tfoot>
       </table>
-      <p className="muted small">Regla de agregación: stock = suma de cajas (unidades hoja). Los pallets solo declaran su contenido y no se suman de nuevo.</p>
 
       <h3>Pallets</h3>
       <table className="table">
-        <thead><tr><th>Unidad</th><th>SKU · lote</th><th className="num">u</th><th>Esperada</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Pallet</th><th>Producto · lote</th><th className="num">u</th><th>Ubicación</th><th>Estado RFID</th></tr></thead>
         <tbody>
           {pallets.map((p) => (
             <tr key={p.id} className={state.ui.selectedUnitId === p.id ? 'is-selected-row' : undefined}>
               <td><button type="button" className="link-btn" onClick={() => { actions.select(p.id); actions.setView('twin'); }}>{p.id}</button></td>
               <td className="small">{skuOfUnit(state, p)?.id} · {p.lotId}</td>
               <td className="num">{p.quantityBaseUnits}</td>
-              <td>{p.expectedLocationId}{p.observedLocationId && p.observedLocationId !== p.expectedLocationId && <div className="text-warn small">obs. {p.observedLocationId}</div>}</td>
+              <td>{p.expectedLocationId}{p.observedLocationId && p.observedLocationId !== p.expectedLocationId && <div className="text-warn small">leído en {p.observedLocationId}</div>}</td>
               <td className="small">{STATUS_ICON[p.verificationStatus]} {STATUS_LABEL[p.verificationStatus]}</td>
             </tr>
           ))}

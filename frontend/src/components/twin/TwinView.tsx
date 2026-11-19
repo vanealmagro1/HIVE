@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
 import Warehouse2D from './Warehouse2D';
+import { STATUS_COLOR } from './colors';
 import { hasWebGL } from './webgl';
 
 const WarehouseScene = lazy(() => import('./WarehouseScene'));
@@ -21,13 +22,13 @@ interface Props {
 function Legend() {
   return (
     <div className="legend" aria-label="Leyenda">
-      <span><span className="sw" style={{ background: '#8aa1b8' }} /> Esperado (sin lectura)</span>
-      <span><span className="sw" style={{ background: '#3fa56b' }} /> Observado coherente</span>
-      <span><span className="sw" style={{ background: '#e09a1a' }} /> ⚠ Pendiente de verificación</span>
-      <span><span className="sw sw-outline" style={{ borderColor: '#2f7fd1' }} /> Ubicación esperada</span>
-      <span><span className="sw sw-ghost" /> ◇ Observación (no confirmada)</span>
-      <span><span className="sw" style={{ background: '#c0392b' }} /> ⏳ Riesgo de vencimiento</span>
-      <span className="legend-note">Posiciones asignadas por el sistema, no localización RTLS.</span>
+      <span><span className="sw" style={{ background: STATUS_COLOR.OBSERVED }} /> Leído por RFID</span>
+      <span><span className="sw" style={{ background: STATUS_COLOR.EXPECTED }} /> Sin lectura reciente</span>
+      <span><span className="sw" style={{ background: STATUS_COLOR.PENDING_VERIFICATION }} /> ⚠ Por verificar</span>
+      <span><span className="sw sw-outline" style={{ borderColor: '#2f6fb0' }} /> Ubicación registrada</span>
+      <span><span className="sw sw-ghost" /> ◇ Dónde se leyó</span>
+      <span><span className="sw" style={{ background: '#c2412d' }} /> ⏳ Vence pronto</span>
+      <span className="legend-note">Ubicaciones según el registro; RFID no da posición exacta.</span>
     </div>
   );
 }
@@ -46,7 +47,7 @@ export default function TwinView({ state, onSelect, onToggle2D }: Props) {
     <div className="twin">
       <div className="twin-toolbar">
         <span className="twin-title">Gemelo digital · {state.warehouse.name}</span>
-        <span className="twin-source">Eventos <strong>SIMULADOS</strong> · sin RFID ni BLE conectados</span>
+        <span className="twin-source">Lecturas <strong>RFID simuladas</strong> · lectores reales y beacons se conectan después</span>
         {!use2D && (
           <button type="button" className="btn-small" onClick={() => setResetViewRequest((n) => n + 1)}>
             Vista general

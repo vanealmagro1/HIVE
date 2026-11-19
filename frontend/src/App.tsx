@@ -11,12 +11,31 @@ import InventoryPanel from './components/panels/InventoryPanel';
 import UnitPanel from './components/panels/UnitPanel';
 import TwinView from './components/twin/TwinView';
 import { SIMULATION_BANNER } from './domain/constants';
-import type { View } from './store/demoState';
+import { formatNumber, formatUsd } from './domain/format';
+import { inventoryTotals, type DemoState, type View } from './store/demoState';
 import { demoStore, useDemoState, type DemoStore } from './store/demoStore';
-import { DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, demoSteps, nextDemoStep, type DemoStepId } from './store/selectors';
+import { alertStory, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, demoSteps, nextDemoStep, type DemoStepId } from './store/selectors';
+
+function Kpis({ state }: { state: DemoState }) {
+  const totals = inventoryTotals(state);
+  const units = [...totals.values()].reduce((a, b) => a + b, 0);
+  const value = state.skus.reduce((a, s) => a + (totals.get(s.id) ?? 0) * s.unitCost, 0);
+  const open = state.alerts.filter((a) => a.status !== 'RESOLVED');
+  const atRisk = open.reduce((a, al) => a + alertStory(state, al).usd, 0);
+  const tasks = state.tasks.filter((t) => t.status === 'OPEN').length;
+  return (
+    <section className="kpis" aria-label="Indicadores de la bodega">
+      <div className="kpi"><div className="kpi-label">Unidades en bodega</div><div className="kpi-value" data-testid="kpi-units">{formatNumber(units)}</div><div className="kpi-sub">{state.skus.length} productos (SKU)</div></div>
+      <div className="kpi"><div className="kpi-label">Valor del inventario</div><div className="kpi-value">{formatUsd(value)}</div><div className="kpi-sub">a costo</div></div>
+      <div className="kpi"><div className="kpi-label">Lecturas RFID</div><div className="kpi-value">{formatNumber(state.events.length)}</div><div className="kpi-sub">en esta sesión (simuladas)</div></div>
+      <div className={`kpi${open.length ? ' is-alert' : ''}`}><div className="kpi-label">Alertas abiertas</div><div className="kpi-value">{open.length}</div><div className="kpi-sub">{open.length ? `${formatUsd(atRisk)} por verificar` : 'todo conciliado'}</div></div>
+      <div className="kpi"><div className="kpi-label">Tareas abiertas</div><div className="kpi-value">{tasks}</div><div className="kpi-sub">aprobadas por una persona</div></div>
+    </section>
+  );
+}
 
 const TABS: { view: View; label: string }[] = [
-  { view: 'twin', label: 'Pallet' },
+  { view: 'twin', label: 'Detalle' },
   { view: 'inventory', label: 'Inventario' },
   { view: 'alerts', label: 'Alertas' },
   { view: 'analytics', label: 'Predicciones' },
@@ -60,6 +79,8 @@ export default function App({ store = demoStore }: { store?: DemoStore }) {
         <div className="refdate">Fecha de referencia: <strong>{state.referenceDate}</strong></div>
         <button type="button" className="btn btn-danger" onClick={actions.reset}>↺ Reiniciar demo</button>
       </header>
+
+      <Kpis state={state} />
 
       <main className="center">
         <TwinView state={state} onSelect={actions.select} onToggle2D={actions.setForce2D} />

@@ -40,13 +40,13 @@ export default function Warehouse2D({ state, expiryRiskLots, onSelect }: Props) 
                         >
                           {STATUS_ICON[unit.verificationStatus]} {unit.id}
                           {alerting.has(unit.id) && ' · ' + STATUS_LABEL[unit.verificationStatus]}
-                          {unit.lotId && expiryRiskLots.has(unit.lotId) && ' · ⏳ riesgo venc.'}
+                          {unit.lotId && expiryRiskLots.has(unit.lotId) && ' · ⏳ vence pronto'}
                         </button>
                       )}
                       {observedHere.map((p) => (
-                        <span key={p.id} className="ghost-chip">◇ Observación de {p.id} (evidencia simulada)</span>
+                        <span key={p.id} className="ghost-chip">◇ Leído aquí: {p.id} (lectura RFID simulada)</span>
                       ))}
-                      {isExpectedOfMismatch && <span className="expected-tag">▭ Ubicación esperada</span>}
+                      {isExpectedOfMismatch && <span className="expected-tag">▭ Ubicación registrada</span>}
                     </div>
                   );
                 })}

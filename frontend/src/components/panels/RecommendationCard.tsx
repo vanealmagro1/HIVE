@@ -16,32 +16,31 @@ export default function RecommendationCard({ rec, task, actions, showAssumptions
   return (
     <div className={`rec-card rec-${rec.status}`} data-testid={`rec-${rec.id}`}>
       <div className="rec-head">
-        <code>{rec.id}</code>
+        <span className="eyebrow">Recomendación</span>
         <span className={`pill pill-${rec.status}`}>{STATUS_TEXT[rec.status]}</span>
       </div>
       <div className="rec-title">{rec.title}</div>
       <div className="small">{rec.reason}</div>
       {rec.estimatedImpactUsd !== null && (
-        <div className="small"><strong>Impacto estimado: {formatUsd(rec.estimatedImpactUsd)}</strong> · <em>Impacto estimado, no ahorro realizado</em></div>
-      )}
-      {showAssumptions && (
-        <details>
-          <summary className="small">Supuestos</summary>
-          <ul className="small">{rec.assumptions.map((a) => <li key={a}>{a}</li>)}</ul>
-        </details>
+        <div className="small"><strong>Impacto estimado: {formatUsd(rec.estimatedImpactUsd)}</strong> <span className="muted">(estimación, no ahorro realizado)</span></div>
       )}
       {rec.status === 'PROPOSED' && (
         <div className="rec-actions">
-          <button type="button" className="btn btn-primary" onClick={() => actions.approve(rec.id)}>Aprobar (simulado)</button>
+          <button type="button" className="btn btn-primary" onClick={() => actions.approve(rec.id)}>Aprobar</button>
           <button type="button" className="btn" onClick={() => actions.reject(rec.id)}>Rechazar</button>
         </div>
       )}
       {task && (
         <div className="task-line" ref={taskRef} data-testid={`task-${task.id}`}>
-          ✔ Tarea <code>{task.id}</code> · {task.status === 'OPEN' ? 'ABIERTA' : 'HECHA'} · {task.owner}
-          <div className="muted small">Aprobación simulada: no se modificó inventario, ubicación esperada ni ERP.</div>
+          ✔ Tarea creada · {task.status === 'OPEN' ? 'ABIERTA' : 'HECHA'} · Responsable: {task.owner}
+          <div className="muted small">El inventario y el ERP no se modifican: la tarea la ejecuta el equipo.</div>
         </div>
       )}
+      <details>
+        <summary>{showAssumptions ? 'Supuestos y detalle técnico' : 'Detalle técnico'}</summary>
+        <div className="small"><code>{rec.id}</code>{task && <> · <code>{task.id}</code></>}</div>
+        {showAssumptions && <ul className="small">{rec.assumptions.map((a) => <li key={a}>{a}</li>)}</ul>}
+      </details>
     </div>
   );
 }

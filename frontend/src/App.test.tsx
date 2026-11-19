@@ -31,9 +31,10 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     await user.click(screen.getByRole('button', { name: /2 · Ejecutar evento simulado/ }));
     const alert = screen.getByTestId('alert-alert-demo-001');
     expect(within(alert).getByText(/PRIORIDAD ALTA/)).toBeTruthy();
-    expect(within(alert).getByText(/PENDIENTE DE VERIFICACIÓN/)).toBeTruthy();
+    expect(within(alert).getByText('POR VERIFICAR')).toBeTruthy();
+    expect(within(alert).getByText(/PAL-001 se leyó fuera de su ubicación/)).toBeTruthy();
     expect(within(alert).getAllByText('SIMULATED').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Observación de PAL-001 \(evidencia simulada\)/)).toBeTruthy(); // marcador en LOC-B2 (2D)
+    expect(screen.getByText(/Leído aquí: PAL-001/)).toBeTruthy(); // marcador en LOC-B2 (2D)
 
     // Reenvío idempotente
     await user.click(screen.getByRole('button', { name: /Reenviar evento/ }));
@@ -66,7 +67,7 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     expect(store.getState().alerts).toEqual([]);
     expect(store.getState().tasks).toEqual([]);
     expect(store.getState().units.find((u) => u.id === 'PAL-001')!.observedLocationId).toBeNull();
-    expect(screen.queryByText(/Observación de PAL-001/)).toBeNull();
+    expect(screen.queryByText(/Leído aquí: PAL-001/)).toBeNull();
   });
 
   it('el botón "Siguiente paso" recorre el guion completo', async () => {
@@ -87,6 +88,6 @@ describe('App · recorrido de 90 s (fallback 2D)', () => {
     await user.click(screen.getByRole('button', { name: /PAL-005/ }));
     const panel = screen.getByTestId('unit-panel');
     expect(within(panel).getByText(/Pallet PAL-005/)).toBeTruthy();
-    expect(within(panel).getByText('2026-12-04')).toBeTruthy();
+    expect(within(panel).getByText(/2026-12-04/)).toBeTruthy();
   });
 });
