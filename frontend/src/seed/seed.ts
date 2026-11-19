@@ -12,19 +12,19 @@ import type { DailyDemand, Lot, LogisticUnit, PurchaseOrder, SeedData, SKU } fro
 import { buildStructure, generateInventory, HERO, LAST_RFID_SWEEP, WAREHOUSE_ID } from './generator';
 
 /** Ubicación libre reservada para el guion: allí el lector de mano "encuentra" PAL-001. */
-export const DEMO_OBSERVED_LOCATION = 'P4-D02-N2';
+export const DEMO_OBSERVED_LOCATION = 'D-07-02';
 
 interface PalletSpec { id: string; lotId: string; locationId: string; boxes: number; qty: number }
 
 const HERO_PALLETS: PalletSpec[] = [
-  { id: 'PAL-001', lotId: 'L-MOC-001-A', locationId: 'P2-I03-N1', boxes: 6, qty: 25 },
-  { id: 'PAL-002', lotId: 'L-MOC-001-A', locationId: 'P2-I04-N1', boxes: 6, qty: 25 },
-  { id: 'PAL-003', lotId: 'L-MOC-001-B', locationId: 'P2-D03-N1', boxes: 6, qty: 25 },
-  { id: 'PAL-004', lotId: 'L-MOC-001-B', locationId: 'P2-D04-N1', boxes: 6, qty: 25 },
-  { id: 'PAL-005', lotId: 'L-TIN-001-A', locationId: 'P5-I01-N1', boxes: 6, qty: 10 },
-  { id: 'PAL-006', lotId: 'L-TIN-001-A', locationId: 'P5-I02-N1', boxes: 6, qty: 10 },
-  { id: 'PAL-007', lotId: 'L-CAL-001', locationId: 'P6-D01-N1', boxes: 4, qty: 25 },
-  { id: 'PAL-008', lotId: 'L-CAL-001', locationId: 'P6-D04-N2', boxes: 4, qty: 25 },
+  { id: 'PAL-001', lotId: 'L-MOC-001-A', locationId: 'B-03-01', boxes: 6, qty: 25 },
+  { id: 'PAL-002', lotId: 'L-MOC-001-A', locationId: 'B-04-01', boxes: 6, qty: 25 },
+  { id: 'PAL-003', lotId: 'L-MOC-001-B', locationId: 'B-08-01', boxes: 6, qty: 25 },
+  { id: 'PAL-004', lotId: 'L-MOC-001-B', locationId: 'B-09-01', boxes: 6, qty: 25 },
+  { id: 'PAL-005', lotId: 'L-TIN-001-A', locationId: 'E-01-01', boxes: 6, qty: 10 },
+  { id: 'PAL-006', lotId: 'L-TIN-001-A', locationId: 'E-02-01', boxes: 6, qty: 10 },
+  { id: 'PAL-007', lotId: 'L-CAL-001', locationId: 'F-06-01', boxes: 4, qty: 25 },
+  { id: 'PAL-008', lotId: 'L-CAL-001', locationId: 'F-09-02', boxes: 4, qty: 25 },
 ];
 
 /** Orden de compra que llega en el guion: 12 cajas de lápices de colores; el proveedor despacha 11. */

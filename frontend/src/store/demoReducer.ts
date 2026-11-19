@@ -3,7 +3,7 @@ import { ingestEvent } from '../engine/ingest';
 import { closeReceipt } from '../engine/receiving';
 import { getScenario } from '../engine/scenarios';
 import type { AlertStatus, InventoryEvent, Task } from '../domain/types';
-import { appendAudit, createInitialState, type DemoState, type View } from './demoState';
+import { appendAudit, createInitialState, type DemoState, type Section, type View } from './demoState';
 
 export type DemoAction =
   | { type: 'RESET' }
@@ -16,7 +16,10 @@ export type DemoAction =
   | { type: 'REJECT_RECOMMENDATION'; recommendationId: string }
   | { type: 'SET_ALERT_STATUS'; alertId: string; status: AlertStatus }
   | { type: 'CLOSE_RECEIPT'; purchaseOrderId: string; closedAt: string }
-  | { type: 'SET_PLAYBACK'; scenarioId: string | null };
+  | { type: 'SET_PLAYBACK'; scenarioId: string | null }
+  | { type: 'SET_SECTION'; section: Section }
+  | { type: 'SET_STEP'; step: number }
+  | { type: 'SET_DRAWER'; open: boolean };
 
 const TASK_OWNER = 'Supervisor de inventarios (demo)';
 
@@ -74,6 +77,12 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
     }
     case 'CLOSE_RECEIPT':
       return closeReceipt(state, action.purchaseOrderId, action.closedAt);
+    case 'SET_SECTION':
+      return { ...state, ui: { ...state.ui, section: action.section, drawer: false } };
+    case 'SET_STEP':
+      return { ...state, ui: { ...state.ui, step: Math.max(0, Math.min(5, action.step)), drawer: false } };
+    case 'SET_DRAWER':
+      return { ...state, ui: { ...state.ui, drawer: action.open } };
     case 'SET_PLAYBACK':
       return { ...state, ui: { ...state.ui, playback: action.scenarioId } };
     case 'APPROVE_RECOMMENDATION':

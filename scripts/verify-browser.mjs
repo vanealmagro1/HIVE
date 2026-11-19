@@ -1,85 +1,63 @@
-// Recorrido real en navegador (Chrome headless con WebGL por software) y capturas.
-// Uso: node verify-browser.mjs http://127.0.0.1:4173/ <carpeta-de-salida>
+// Recorrido real de HIVE UI v1.1 en Chrome headless, con capturas por paso y resolución.
+// Uso: node verify-browser.mjs http://127.0.0.1:4173/ <carpeta> 1366x768 [gpu]   (gpu = usar la GPU real)
 import { chromium } from 'playwright-core';
-
-const url = process.argv[2] ?? 'http://127.0.0.1:4173/';
-const out = process.argv[3] ?? '.';
+import { mkdirSync } from 'node:fs';
+const [url = 'http://127.0.0.1:4174/', out = 'v11', size = '1366x768', gpu] = process.argv.slice(2);
+const [w, h] = size.split('x').map(Number);
+mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({
-  channel: 'chrome',
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  channel: 'chrome', headless: true,
+  args: gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
-const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+const page = await browser.newPage({ viewport: { width: w, height: h } });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-const step = (name) => page.getByRole('button', { name });
-const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
-
-const t0 = Date.now();
+const shot = (n) => page.screenshot({ path: `${out}/${size}_${n}.png` });
+const btn = (name) => page.getByRole('button', { name });
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.waitForSelector('canvas', { timeout: 20000 });
+await page.waitForTimeout(2500);
+const overflowX = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+console.log(size, '| scroll horizontal:', overflowX, '| unidades:', await page.locator('[data-testid="kpi-units"]').textContent());
+await shot('1_inicio');
+await btn(/Recibir camión/).click();
+await page.waitForTimeout(2500);
+await shot('1b_recibiendo');
+await page.waitForSelector('[data-testid="receipt-result"]', { timeout: 30000 });
 await page.waitForTimeout(1500);
-console.log('canvas:', await page.locator('canvas').count(), '| 2D:', await page.locator('[data-testid="warehouse-2d"]').count(), '| carga ms:', Date.now() - t0);
-console.log('unidades iniciales:', await page.locator('[data-testid="kpi-units"]').textContent());
-await shot('01_bodega');
-
-// 1 · Detectar: recepción RFID en vivo por el portal del andén.
-await step(/1 · Recibir camión/).click();
-await page.waitForTimeout(2600);
-await shot('02_recepcion_en_curso');
-await page.waitForSelector('[data-testid="receipt-result"]', { timeout: 20000 });
-await page.waitForTimeout(600);
-console.log('recepción:', (await page.locator('[data-testid="receipt-result"]').textContent()).trim());
-console.log('unidades tras recepción:', await page.locator('[data-testid="kpi-units"]').textContent());
-await shot('03_recepcion_cerrada');
-
-// 2 · Detectar: conteo del pasillo 4 con lector de mano.
-await step(/2 · Contar pasillo 4/).click();
-await page.waitForTimeout(2200);
-await shot('04_conteo_en_curso');
-await page.waitForSelector('[data-testid="alert-alert-demo-001"]', { timeout: 20000 });
+console.log('recepción:', (await page.locator('[data-testid="receipt-result"]').textContent()).trim(), '| unidades:', await page.locator('[data-testid="kpi-units"]').textContent(), '| alertas:', await page.locator('[data-testid="kpi-alerts"]').textContent());
+await shot('1c_recibido');
+await btn('Paso siguiente').click();
+await btn(/Contar pasillo D/).click();
+await page.waitForSelector('[data-testid="new-evidence"]', { timeout: 30000 });
+await page.waitForTimeout(1800);
+await shot('2_detectar');
+await btn('Paso siguiente').click();
+await page.waitForTimeout(1800);
+console.log('alerta:', (await page.locator('[data-testid="loc-compare"]').textContent()));
+await shot('3_alertar');
+await btn('Paso siguiente').click();
+await page.waitForTimeout(1500);
+console.log('impacto:', (await page.locator('[data-testid="impact-facts"]').textContent()));
+await shot('4_analizar');
+await btn('Paso siguiente').click();
 await page.waitForTimeout(800);
-console.log('alertas:', await page.locator('[data-testid^="alert-alert"]').count(), '| marcador 3D "leído aquí":', await page.locator('.label3d-ghost').count());
-await shot('05_alertas');
-
-await step(/Reenviar lectura/).click();
-await page.waitForTimeout(300);
-console.log('reenvío:', await page.locator('[data-testid="last-message"]').textContent(), '| alertas:', await page.locator('[data-testid^="alert-alert"]').count());
-
-// Clic REAL sobre un pallet en la escena 3D (coordenadas proyectadas desde la escena).
-const pt = await page.evaluate(() => window.__hiveProject?.('PAL-002'));
-await page.mouse.move(pt.x, pt.y);
-await page.waitForTimeout(300);
-await page.mouse.click(pt.x, pt.y);
+await btn('Aprobar acción').click();
 await page.waitForTimeout(800);
-console.log('clic 3D abre ficha:', (await page.locator('[data-testid="unit-panel"] h2').textContent().catch(() => '—')));
-await shot('06_ficha_3d');
-
-// 3-4 · Priorizar
-await step(/4 · Ver predicción/).click();
+await shot('5_recomendar');
+await btn('Paso siguiente').click();
+await page.waitForTimeout(1200);
+console.log('registro:', (await page.locator('[data-testid="task-summary"]').textContent()));
+await shot('6_registrar');
+await btn('Ver detalle').click();
 await page.waitForTimeout(600);
-console.log('MOC-001:', (await page.locator('[data-testid="analytics-MOC-001"] .metrics').textContent()));
-await shot('07_prediccion');
-
-// 5 · Actuar
-await step(/5 · Aprobar acciones/).click();
-await page.waitForTimeout(600);
-console.log('tareas:', await page.locator('[data-testid^="task-"]').count());
-await shot('08_tareas');
-
-// 6 · Medir
-await step(/6 · Ver resultados/).click();
-await page.waitForTimeout(600);
-await shot('09_resultados');
-
-await step(/Reiniciar demo/).click();
-await page.waitForTimeout(800);
-console.log('tras reset: unidades', await page.locator('[data-testid="kpi-units"]').textContent(), '| marcadores:', await page.locator('.label3d-ghost').count());
-
-await step('Vista 2D').click();
-await page.waitForTimeout(400);
-await shot('10_vista2d');
-console.log('2D activo:', await page.locator('[data-testid="warehouse-2d"]').count());
-console.log('errores/avisos de consola:', errors.length ? errors : 'ninguno');
+await shot('7_drawer');
+await page.keyboard.press('Escape');
+for (const [name, label] of [['inventario', 'Inventario'], ['gemelo', 'Gemelo digital'], ['eventos', 'Eventos'], ['analitica', 'Analítica'], ['reportes', 'Reportes']]) {
+  await page.locator('.nav-item', { hasText: label }).click();
+  await page.waitForTimeout(name === 'gemelo' ? 1500 : 500);
+  await shot(`8_${name}`);
+}
+console.log('errores/avisos:', errors.length ? errors.slice(0, 6) : 'ninguno');
 await browser.close();

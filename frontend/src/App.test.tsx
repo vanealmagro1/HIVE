@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// Recorrido completo de la demo con clics reales sobre la UI. jsdom no tiene WebGL, por lo que
-// este test ejercita la vista 2D de respaldo (mismas acciones y mismo estado que el 3D).
-// Las lecturas "en vivo" se reproducen a 1 ms por lectura para que el test sea rápido.
+// HIVE UI v1.1 · recorrido de 6 pasos y navegación con clics reales. jsdom no tiene WebGL: se ejercita la
+// vista 2D de respaldo (mismo estado y mismas acciones que el 3D). Lecturas "en vivo" a 1 ms por lectura.
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,101 +12,133 @@ import { getScenario } from './engine/scenarios';
 afterEach(cleanup);
 const FAST = { receiptIntervalMs: 1, countIntervalMs: 1 };
 const total = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
+const T = { timeout: 20_000 };
 
-describe('App · recorrido de 90 s en 4 fases (fallback 2D)', () => {
-  it('Detectar (recepción RFID + conteo), Priorizar, Actuar y Medir; idempotencia y reset', async () => {
+describe('HIVE UI v1.1 · demo guiada de 6 pasos (vista 2D)', () => {
+  it('Visualizar → Detectar → Alertar → Analizar → Recomendar → Registrar, con reinicio determinista', async () => {
     const store = createDemoStore();
     const user = userEvent.setup();
     render(<App store={store} playback={FAST} />);
 
-    expect(screen.getByTestId('sim-banner').textContent).toBe('ENTORNO DE SIMULACIÓN · DATOS SINTÉTICOS');
-    expect(screen.getByTestId('warehouse-2d')).toBeTruthy();
+    // Una sola etiqueta de simulación; KPIs derivados del estado.
+    expect(screen.getAllByText('Demo simulada')).toHaveLength(1);
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.599');
+    expect(screen.getByTestId('kpi-alerts').textContent).toBe('0');
+    expect(screen.getByTestId('kpi-exposure').textContent).toBe('USD 2.400');
+    expect(screen.getByTestId('kpi-coverage').textContent).toBe('60 días');
     const before = total(inventoryTotals(store.getState()));
 
-    // 1 · Detectar: el camión pasa por el portal RFID; el inventario sube solo con lo leído.
-    await user.click(screen.getByRole('button', { name: /1 · Recibir camión/ }));
-    const result = await screen.findByTestId('receipt-result', {}, { timeout: 20_000 });
-    expect(result.textContent).toMatch(/11 de 12 cajas\. Falta 1 caja · 24 u · USD 86,40/);
+    // 1 · Visualizar: recibir camión por el portal RFID (cantidades consistentes: 288 esperadas, 264 leídas, 24 faltan).
+    expect(screen.getByText('Paso 1 de 6')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Recibir camión/ }));
+    const facts = await screen.findByTestId('receipt-result', {}, T);
+    expect(facts.textContent).toMatch(/12esperadas · 288 u/);
+    expect(facts.textContent).toMatch(/11detectadas · 264 u/);
+    expect(facts.textContent).toMatch(/1faltante · 24 u/);
     expect(total(inventoryTotals(store.getState()))).toBe(before + 264);
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.863');
+    expect(screen.getByTestId('kpi-alerts').textContent).toBe('1');
+    expect(screen.queryByRole('button', { name: /Recibir camión/ })).toBeNull(); // idempotente: ya no se ofrece
 
-    // 2 · Detectar: conteo del pasillo 4 con lector de mano.
-    await user.click(screen.getByRole('button', { name: /2 · Contar pasillo 4/ }));
-    const alert = await screen.findByTestId('alert-alert-demo-001', {}, { timeout: 20_000 });
-    expect(within(alert).getByText(/PRIORIDAD ALTA/)).toBeTruthy();
-    expect(within(alert).getByText(/PAL-001 se leyó fuera de su ubicación/)).toBeTruthy();
-    expect(within(screen.getByTestId('alert-alert-oc-2026-1187')).getByText(/Faltan 1 de 12 cajas/)).toBeTruthy();
-    expect(screen.getByText(/Leído aquí: PAL-001/)).toBeTruthy(); // marcador en P4-D02-N2 (2D)
+    // 2 · Detectar
+    await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    await user.click(screen.getByRole('button', { name: /Contar pasillo D/ }));
+    const evidence = await screen.findByTestId('new-evidence', {}, T);
+    expect(evidence.textContent).toMatch(/D-07-02/);
+    const row = screen.getByTestId('product-row');
+    expect(within(row).getByText('Mochila escolar básica')).toBeTruthy();
+    expect(within(row).getByText('PAL-001')).toBeTruthy();
     const countLen = getScenario('DEMO_COUNT_P4').events.length;
     expect(store.getState().events).toHaveLength(14 + countLen);
+    expect(new Set(store.getState().events.map((e) => e.id)).size).toBe(14 + countLen); // sin duplicados
 
-    // Reenvío idempotente de la lectura clave
-    await user.click(screen.getByRole('button', { name: /Reenviar lectura/ }));
-    expect(screen.getByTestId('last-message').textContent).toMatch(/idempotente/);
-    expect(store.getState().events).toHaveLength(14 + countLen);
-    expect(store.getState().alerts).toHaveLength(2);
+    // 3 · Alertar: ubicación por verificar; la ubicación oficial no cambia.
+    await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    const compare = screen.getByTestId('loc-compare');
+    expect(compare.textContent).toMatch(/Ubicación esperada.*B-03-01/);
+    expect(compare.textContent).toMatch(/Ubicación detectada.*D-07-02/);
+    expect(screen.getByText('Pendiente de verificación')).toBeTruthy();
+    expect(store.getState().units.find((u) => u.id === 'PAL-001')!.expectedLocationId).toBe('B-03-01');
+    expect(store.getState().alerts.map((a) => a.type).sort()).toEqual(['LOCATION_MISMATCH', 'RECEIPT_SHORTAGE']);
+    expect(screen.getByTestId('kpi-alerts').textContent).toBe('2');
 
-    // 3-4 · Priorizar
-    expect(screen.getByRole('tab', { name: /Alertas/ }).getAttribute('aria-selected')).toBe('true');
-    await user.click(screen.getByRole('button', { name: /4 · Ver predicción/ }));
-    const a = screen.getByTestId('analytics-MOC-001');
-    expect(within(a).getAllByText('60 días').length).toBeGreaterThan(0);
-    expect(within(a).getByText('300 unidades')).toBeTruthy();
-    expect(within(a).getAllByText('USD 2.400').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('analytics-TIN-001')).getAllByText('USD 720').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('analytics-CAL-001')).getByText('Sin datos suficientes para pronosticar')).toBeTruthy();
+    // Detalle técnico en el drawer; Escape lo cierra.
+    await user.click(screen.getByRole('button', { name: 'Ver detalle' }));
+    expect(within(screen.getByTestId('detail-drawer')).getAllByText('SIMULATED').length).toBeGreaterThan(0);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('detail-drawer')).toBeNull();
 
-    // 5 · Actuar: aprobar crea tareas (reclamo + mochilas) y no cambia el stock
+    // 4 · Analizar: escenario de sobrestock calculado (600 u, 10/día, 30 días, USD 8).
+    await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    const impact = screen.getByTestId('impact-facts');
+    expect(impact.textContent).toMatch(/60 días/);
+    expect(impact.textContent).toMatch(/300unidades excedentes/);
+    expect(impact.textContent).toMatch(/USD 2.400/);
+
+    // 5 · Recomendar: avanzar NO aprueba; solo el botón.
+    await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    expect(screen.getByTestId('rec-title').textContent).toBe('Redistribuir 300 unidades');
+    expect(store.getState().recommendations.find((r) => r.id === 'rec-moc-001')!.status).toBe('PROPOSED');
     const stock = inventoryTotals(store.getState());
-    await user.click(screen.getByRole('button', { name: /5 · Aprobar acciones/ }));
-    expect(screen.getByTestId('task-task-rec-moc-001')).toBeTruthy();
-    expect(store.getState().tasks.map((t) => t.id).sort()).toEqual(['task-rec-claim-oc-2026-1187', 'task-rec-moc-001']);
+    await user.click(screen.getByRole('button', { name: 'Aprobar acción' }));
+    expect(store.getState().recommendations.find((r) => r.id === 'rec-moc-001')!.status).toBe('APPROVED');
+    expect(store.getState().tasks.map((t) => t.id)).toEqual(['task-rec-moc-001']);
     expect(inventoryTotals(store.getState())).toEqual(stock);
 
-    // 6 · Medir
-    await user.click(screen.getByRole('button', { name: /6 · Ver resultados/ }));
-    const m = screen.getByTestId('measure-panel');
-    expect(within(m).getByText('11 / 12')).toBeTruthy();
-    expect(within(m).getByText('2 tareas')).toBeTruthy();
-    expect(screen.getByText('Completado')).toBeTruthy();
+    // 6 · Registrar
+    await user.click(screen.getByRole('button', { name: 'Paso siguiente' }));
+    const summary = screen.getByTestId('task-summary');
+    expect(summary.textContent).toMatch(/task-rec-moc-001/);
+    expect(summary.textContent).toMatch(/Pendiente de ejecución/);
+    await user.click(screen.getByRole('button', { name: 'Paso anterior' }));
+    expect(screen.getByText('Paso 5 de 6')).toBeTruthy();
 
-    // Reset
-    await user.click(screen.getByRole('button', { name: /Reiniciar demo/ }));
+    // Reinicio determinista: sin tareas, alertas ni eventos; paso 1.
+    await user.click(screen.getByRole('button', { name: 'Reiniciar demo' }));
     const s = store.getState();
-    expect(s.alerts).toEqual([]);
-    expect(s.tasks).toEqual([]);
-    expect(s.events).toEqual([]);
+    expect([s.events, s.alerts, s.tasks]).toEqual([[], [], []]);
+    expect(s.ui.step).toBe(0);
     expect(s.purchaseOrders[0].status).toBe('EXPECTED');
-    expect(s.units.find((u) => u.id === 'PAL-001')!.observedLocationId).toBe('P2-I03-N1');
-    expect(screen.queryByText(/Leído aquí: PAL-001/)).toBeNull();
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.599');
+    expect(screen.getByText('Paso 1 de 6')).toBeTruthy();
   }, 30_000);
 
-  it('el botón "Siguiente paso" recorre el guion completo', async () => {
-    const store = createDemoStore();
+  it('Registrar sin aprobar muestra la acción pendiente y ofrece volver al paso 5', async () => {
     const user = userEvent.setup();
-    render(<App store={store} playback={FAST} />);
-    const next = screen.getByRole('button', { name: /Siguiente paso/ });
-    await user.click(next); // recepción
-    await screen.findByTestId('receipt-result', {}, { timeout: 20_000 });
-    await user.click(next); // conteo
-    await screen.findByTestId('alert-alert-demo-001', {}, { timeout: 20_000 });
-    for (let i = 0; i < 4; i += 1) await user.click(next);
-    const s = store.getState();
-    expect(s.purchaseOrders[0].status).toBe('CLOSED');
-    expect(s.events.some((e) => e.id === 'evt-demo-001')).toBe(true);
-    expect(s.tasks).toHaveLength(2);
-    expect(s.ui.view).toBe('measure');
-    expect((next as HTMLButtonElement).disabled).toBe(true);
-  }, 30_000);
+    render(<App store={createDemoStore()} playback={FAST} />);
+    await user.click(screen.getByRole('button', { name: '6 · Registrar' }));
+    expect(screen.getByText('Acción pendiente de aprobación')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Volver al paso 5' }));
+    expect(screen.getByText('Paso 5 de 6')).toBeTruthy();
+  });
 
-  it('clic en una ubicación de la vista 2D abre la ficha del pallet', async () => {
+  it('la navegación lateral abre cada sección real (Reportes como vista pendiente)', async () => {
     const user = userEvent.setup();
     render(<App store={createDemoStore()} />);
-    await user.click(screen.getByRole('button', { name: /^PAL-005/ }));
-    const panel = screen.getByTestId('unit-panel');
-    expect(within(panel).getByText(/Pallet PAL-005/)).toBeTruthy();
-    expect(within(panel).getByText(/2026-12-04/)).toBeTruthy();
+    const nav = (name: string) => user.click(screen.getByRole('button', { name }));
+    await nav('Inventario');
+    expect(screen.getByTestId('inventory-panel')).toBeTruthy();
+    await nav('Eventos');
+    expect(screen.getByTestId('rfid-panel')).toBeTruthy();
+    expect(screen.getByTestId('alerts-panel')).toBeTruthy();
+    await nav('Analítica');
+    expect(screen.getByTestId('analytics-panel')).toBeTruthy();
+    expect(screen.getByTestId('measure-panel')).toBeTruthy();
+    await nav('Reportes');
+    expect(screen.getByText('Esta sección aún no está disponible en la demo.')).toBeTruthy();
+    await nav('Resumen');
+    expect(screen.getByTestId('step-panel')).toBeTruthy();
+  });
+
+  it('Gemelo digital: un pallet se identifica por su producto y un pallet mixto muestra su desglose', async () => {
+    const user = userEvent.setup();
+    render(<App store={createDemoStore()} />);
+    await user.click(screen.getByRole('button', { name: 'Gemelo digital' }));
+    await user.click(screen.getByRole('button', { name: /^PAL-005 · Cartucho de tinta negra original/ }));
+    expect(screen.getByTestId('unit-title').textContent).toBe('Cartucho de tinta negra original');
+    expect(within(screen.getByTestId('unit-panel')).getByText(/2026-12-04/)).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: /· Pallet mixto ·/ })[0]);
+    expect(screen.getByTestId('unit-title').textContent).toBe('Pallet mixto');
+    expect(screen.getByTestId('mix-lines').children.length).toBeGreaterThanOrEqual(2);
   });
 });

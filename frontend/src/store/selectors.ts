@@ -35,14 +35,14 @@ export function placeName(state: DemoState, locationId: string | null): string {
   const rack = state.racks.find((r) => r.id === loc.rackId);
   const zone = state.zones.find((z) => z.id === rack?.zoneId);
   if (!rack?.aisle) return `${loc.id} (${zone?.name ?? ''})`;
-  return `${loc.id} (${zone?.name ?? ''}, ${rack.name}, bahía ${loc.slot}, nivel ${loc.level})`;
+  return `${loc.id} (${zone?.name ?? ''}, ${rack.name}, nivel ${loc.level})`;
 }
 
 const CHANNEL_LABEL = { RFID_PORTAL: 'Portal RFID del andén', RFID_HANDHELD: 'Lector de mano RFID', BLE_BEACON: 'Beacon BLE' } as const;
 
 export function eventSourceLabel(e: InventoryEvent): string {
   const base = e.channel ? CHANNEL_LABEL[e.channel] : 'Lectura RFID';
-  return `${base}${e.antenna ? ` · antena ${e.antenna}` : ''}${e.source === 'SIMULATED' ? ' (simulada)' : ''}`;
+  return `${base}${e.antenna ? ` · antena ${e.antenna}` : ''}`;
 }
 
 /** Unidades y valor de una unidad logística (para un pallet: contenido declarado). */
@@ -51,47 +51,70 @@ export function unitValue(state: DemoState, unit: LogisticUnit): { units: number
   return { units: unit.quantityBaseUnits, usd: unit.quantityBaseUnits * (sku?.unitCost ?? 0) };
 }
 
-export interface AlertStory { title: string; detail: string; units: number; usd: number; next: string }
+export interface AlertStory {
+  title: string; detail: string; units: number; usd: number; next: string;
+  /** Campos estructurados para la UI orientada al producto. */
+  heading: string; product: string; refLine: string; expected: string | null; detected: string | null; detectedIsZone: boolean;
+}
 
 /** Explicación de negocio de una alerta: qué pasó, cuánto involucra y qué hacer. */
 export function alertStory(state: DemoState, alert: Alert): AlertStory {
   const unit = state.units.find((u) => u.id === alert.unitId);
   const value = unit ? unitValue(state, unit) : { units: 0, usd: 0 };
-  const sku = unit ? skuOfUnit(state, unit) : null;
-  const what = unit ? `${unit.id}${sku ? ` · ${sku.name}` : ''}` : 'Unidad';
+  const contents = unit ? unitContents(state, unit) : null;
+  const product = contents?.title ?? 'Unidad';
+  const what = unit ? `${product} · ${unit.id}` : 'Unidad';
   if (alert.type === 'LOCATION_MISMATCH' && unit) {
     return {
+      heading: 'Ubicación por verificar',
+      product,
+      refLine: `${contents?.skuId ?? contents?.subtitle ?? ''} · ${unit.id}`,
+      expected: unit.expectedLocationId,
+      detected: unit.observedLocationId,
+      detectedIsZone: false,
       title: `${unit.id} se leyó fuera de su ubicación`,
       detail: `${what}. Registrado en ${placeName(state, unit.expectedLocationId)}; el lector RFID lo detectó en ${placeName(state, unit.observedLocationId)}.`,
       ...value,
-      next: 'Verificar físicamente ambas ubicaciones. HIVE no mueve el stock ni da por perdido el pallet hasta que una persona lo confirme.',
+      next: 'Verificar ambas ubicaciones. La ubicación oficial no cambia hasta que una persona lo confirme.',
     };
   }
   if (alert.type === 'RECEIPT_SHORTAGE') {
     const po = state.purchaseOrders.find((p) => p.palletId === alert.unitId);
     if (po) {
       const missing = po.boxes.filter((b) => !po.receivedBoxIds.includes(b.boxId));
-      const qty = missing.reduce((s, b) => s + b.qty, 0);
-      const skuName = state.skus.find((s) => s.id === po.skuId)?.name ?? po.skuId;
-      const cost = state.skus.find((s) => s.id === po.skuId)?.unitCost ?? 0;
+      const qty = missing.reduce((t, b) => t + b.qty, 0);
+      const skuName = state.skus.find((k) => k.id === po.skuId)?.name || po.skuId;
+      const cost = state.skus.find((k) => k.id === po.skuId)?.unitCost ?? 0;
       return {
+        heading: 'Faltante en recepción',
+        product: skuName,
+        refLine: `${po.skuId} · ${po.id}`,
+        expected: `${po.boxes.length} cajas`,
+        detected: `${po.receivedBoxIds.length} cajas`,
+        detectedIsZone: false,
         title: `Faltan ${missing.length} de ${po.boxes.length} cajas en la recepción ${po.id}`,
         detail: `${skuName} · ${po.supplier}. El portal RFID leyó ${po.receivedBoxIds.length} cajas; no respondió ${missing.map((m) => m.boxId).join(', ')}.`,
         units: qty,
         usd: Math.round(qty * cost * 100) / 100,
-        next: 'Contar el pallet antes de firmar la guía. Si se confirma, reclamar al proveedor: el inventario ya registra solo lo recibido.',
+        next: 'Contar el pallet antes de firmar la guía y, si se confirma, reclamar al proveedor.',
       };
     }
   }
   if (alert.type === 'NOT_OBSERVED' && unit) {
     return {
+      heading: 'Sin lectura',
+      product,
+      refLine: `${contents?.skuId ?? ''} · ${unit.id}`,
+      expected: unit.expectedLocationId,
+      detected: null,
+      detectedIsZone: false,
       title: `${unit.id} no respondió en el último recorrido`,
       detail: `${what}. Registrado en ${placeName(state, unit.expectedLocationId)}; ningún lector leyó su etiqueta.`,
       ...value,
-      next: 'Recontar la ubicación. Una lectura faltante no significa pérdida: la etiqueta puede estar tapada o dañada.',
+      next: 'Recontar la ubicación. Una lectura faltante no significa pérdida.',
     };
   }
-  return { title: alert.description, detail: '', ...value, next: 'Revisar la evidencia.' };
+  return { heading: 'Alerta', product, refLine: '', expected: null, detected: null, detectedIsZone: false, title: alert.description, detail: '', ...value, next: 'Revisar la evidencia.' };
 }
 
 export function describeLocation(state: DemoState, locationId: string | null): string {
@@ -101,7 +124,8 @@ export function describeLocation(state: DemoState, locationId: string | null): s
   const rack = state.racks.find((r) => r.id === loc.rackId);
   const zone = state.zones.find((z) => z.id === rack?.zoneId);
   if (!rack?.aisle) return `${loc.id} · ${zone?.name ?? ''} · posición ${loc.slot}`;
-  return `${loc.id} · ${zone?.name ?? ''} · ${rack.name} · bahía ${loc.slot} · nivel ${loc.level}`;
+  const bay = loc.id.split('-')[1] ?? String(loc.slot);
+  return `${loc.id} · ${zone?.name ?? ''} · ${rack.name} · bahía ${bay} · nivel ${loc.level}`;
 }
 
 export function pallets(state: DemoState): LogisticUnit[] {
@@ -113,6 +137,47 @@ export function skuOfUnit(state: DemoState, unit: LogisticUnit) {
   return lot ? state.skus.find((s) => s.id === lot.skuId) ?? null : null;
 }
 
+export interface ContentLine { skuId: string; name: string; qty: number }
+export interface UnitContents {
+  kind: 'single' | 'mixed';
+  /** Lo primero que ve el usuario: nombre comercial del producto, o "Pallet mixto". */
+  title: string;
+  /** Segunda línea: "SKU · N unidades" o "N productos · X unidades". */
+  subtitle: string;
+  skuId: string | null;
+  qty: number;
+  lines: ContentLine[];
+}
+
+/**
+ * Identificación orientada al producto de un pallet o caja: agrupa sus unidades hoja por SKU.
+ * Un pallet con varias líneas de SKU es MIXTO y no se le atribuye un único producto.
+ */
+export function unitContents(state: Pick<DemoState, 'units' | 'lots' | 'skus'>, unit: LogisticUnit): UnitContents {
+  const kids = state.units.filter((u) => u.parentId === unit.id);
+  const leaves = kids.length > 0 ? kids : [unit];
+  const bySku = new Map<string, number>();
+  for (const leaf of leaves) {
+    const skuId = state.lots.find((l) => l.id === leaf.lotId)?.skuId;
+    if (skuId) bySku.set(skuId, (bySku.get(skuId) ?? 0) + leaf.quantityBaseUnits);
+  }
+  const lines = [...bySku].map(([skuId, qty]) => ({ skuId, qty, name: state.skus.find((k) => k.id === skuId)?.name || skuId }))
+    .sort((a, b) => b.qty - a.qty);
+  const qty = lines.reduce((t, l) => t + l.qty, 0);
+  if (lines.length > 1) {
+    return { kind: 'mixed', title: 'Pallet mixto', subtitle: `${lines.length} productos · ${formatNumber(qty)} unidades`, skuId: null, qty, lines };
+  }
+  const line = lines[0];
+  return {
+    kind: 'single',
+    title: line?.name ?? unit.id,
+    subtitle: line ? `${line.skuId} · ${formatNumber(qty)} unidades` : `${formatNumber(unit.quantityBaseUnits)} unidades`,
+    skuId: line?.skuId ?? null,
+    qty: line ? qty : unit.quantityBaseUnits,
+    lines,
+  };
+}
+
 /** Pallet que debe resaltarse por discrepancia/alerta abierta. */
 export function unitsWithOpenAlerts(state: DemoState): Set<string> {
   return new Set(state.alerts.filter((a) => a.status !== 'RESOLVED' && a.unitId).map((a) => a.unitId!));
@@ -122,33 +187,38 @@ export const RECEIPT_SCENARIO_ID = 'DEMO_RECEIPT_001';
 export const COUNT_SCENARIO_ID = 'DEMO_COUNT_P4';
 export const CLAIM_RECOMMENDATION_ID = 'rec-claim-oc-2026-1187';
 
-export type DemoStepId = 'receive' | 'count' | 'alert' | 'analytics' | 'approve' | 'measure' | 'done';
-export type DemoPhase = 'Detectar' | 'Priorizar' | 'Actuar' | 'Medir';
+export type DemoStepId = 'visualize' | 'detect' | 'alert' | 'analyze' | 'recommend' | 'register';
 
-export interface DemoStep { id: DemoStepId; label: string; phase: DemoPhase; done: boolean }
+export interface DemoStep { id: DemoStepId; title: string; subtitle: string; done: boolean }
 
-/** Recorrido guiado de 90 s derivado exclusivamente del estado (sin temporizadores propios). */
+/**
+ * Recorrido guiado de 6 pasos. La navegación es explícita (ui.step); "done" se deriva del estado:
+ * los pasos con acción se completan al ejecutarla; los informativos, al pasar por ellos.
+ * Avanzar NUNCA aprueba ni ejecuta nada por sí solo.
+ */
 export function demoSteps(state: DemoState): DemoStep[] {
   const received = state.purchaseOrders.every((p) => p.status === 'CLOSED');
-  const counted = state.events.some((e) => e.id === DEMO_EVENT_ID) && state.ui.playback !== COUNT_SCENARIO_ID;
-  const recs = [DEMO_RECOMMENDATION_ID, CLAIM_RECOMMENDATION_ID]
-    .map((id) => state.recommendations.find((r) => r.id === id)).filter((r) => r !== undefined);
-  const approved = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status === 'APPROVED'
-    && recs.every((r) => r.status !== 'PROPOSED');
-  const later = (v: string) => ['alerts', 'analytics', 'measure'].includes(v);
-  const alertSeen = counted && (later(state.ui.view) || approved);
-  const analyticsSeen = alertSeen && (state.ui.view === 'analytics' || state.ui.view === 'measure' || approved);
-  const measured = approved && state.ui.view === 'measure';
+  const detected = state.events.some((e) => e.id === DEMO_EVENT_ID) && state.ui.playback !== COUNT_SCENARIO_ID;
+  const approved = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status === 'APPROVED';
+  const at = state.ui.step;
   return [
-    { id: 'receive', label: 'Recibir camión', phase: 'Detectar', done: received },
-    { id: 'count', label: 'Contar pasillo 4', phase: 'Detectar', done: counted },
-    { id: 'alert', label: 'Revisar alertas', phase: 'Priorizar', done: alertSeen },
-    { id: 'analytics', label: 'Ver predicción', phase: 'Priorizar', done: analyticsSeen },
-    { id: 'approve', label: 'Aprobar acciones', phase: 'Actuar', done: approved },
-    { id: 'measure', label: 'Ver resultados', phase: 'Medir', done: measured },
+    { id: 'visualize', title: 'Visualizar', subtitle: 'Tu bodega, en tiempo real', done: received },
+    { id: 'detect', title: 'Detectar', subtitle: 'Movimiento detectado', done: detected },
+    { id: 'alert', title: 'Alertar', subtitle: 'Ubicación por verificar', done: detected && at > 2 },
+    { id: 'analyze', title: 'Analizar', subtitle: 'Impacto identificado', done: at > 3 || approved },
+    { id: 'recommend', title: 'Recomendar', subtitle: 'Acción recomendada', done: approved },
+    { id: 'register', title: 'Registrar', subtitle: 'Acción registrada', done: approved && at === 5 },
   ];
 }
 
-export function nextDemoStep(state: DemoState): DemoStepId {
-  return demoSteps(state).find((s) => !s.done)?.id ?? 'done';
+/** KPIs del encabezado, todos derivados del estado. */
+export function kpis(state: DemoState, analytics: { skuId: string; skuName: string; coverageDays: number | null; excessExposureUsd: number | null }[]) {
+  const units = state.units.filter((u) => !state.units.some((x) => x.parentId === u.id))
+    .reduce((t, u) => t + u.quantityBaseUnits, 0);
+  const alerts = state.alerts.filter((a) => a.status !== 'RESOLVED').length;
+  const excessRecs = new Set(state.recommendations.filter((r) => r.type === 'REVIEW_EXCESS').map((r) => r.skuId));
+  const exposed = analytics.filter((a) => excessRecs.has(a.skuId));
+  const exposure = exposed.reduce((t, a) => t + (a.excessExposureUsd ?? 0), 0);
+  const top = [...exposed].sort((a, b) => (b.excessExposureUsd ?? 0) - (a.excessExposureUsd ?? 0))[0];
+  return { units, alerts, exposure, coverageDays: top?.coverageDays ?? null, coverageSku: top?.skuName ?? null };
 }

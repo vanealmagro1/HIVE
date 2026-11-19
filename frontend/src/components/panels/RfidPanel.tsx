@@ -67,7 +67,7 @@ export default function RfidPanel({ state, actions }: { state: DemoState; action
 
       <article className="card" data-testid="count-card">
         <div className="rec-head">
-          <span className="eyebrow">Conteo cíclico · pasillo 4</span>
+          <span className="eyebrow">Conteo cíclico · pasillo D</span>
           <span className="pill">{countFinished ? 'TERMINADO' : counting ? 'RECORRIENDO…' : 'PENDIENTE'}</span>
         </div>
         <div className="rec-title">Lector de mano RFID</div>
@@ -79,7 +79,7 @@ export default function RfidPanel({ state, actions }: { state: DemoState; action
         {!countFinished && (
           <div className="rec-actions">
             <button type="button" className="btn btn-primary" onClick={actions.runDemoEvent} disabled={counting || state.ui.playback !== null}>
-              {counting ? 'Leyendo…' : '▶ Recorrer pasillo 4'}
+              {counting ? 'Leyendo…' : '▶ Recorrer pasillo D'}
             </button>
             <button type="button" className="btn" onClick={actions.completeCount}>Completar conteo</button>
           </div>

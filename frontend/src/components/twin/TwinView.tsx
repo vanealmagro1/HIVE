@@ -1,7 +1,8 @@
-import { Component, lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
+import { Box, Layers, Maximize, Minimize, Minus, Plus, RotateCcw } from 'lucide-react';
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
 import Warehouse2D from './Warehouse2D';
-import { STATUS_COLOR } from './colors';
+import { EVENT_COLOR } from './colors';
 import { hasWebGL } from './webgl';
 
 const WarehouseScene = lazy(() => import('./WarehouseScene'));
@@ -17,63 +18,97 @@ interface Props {
   state: DemoState;
   onSelect: (unitId: string) => void;
   onToggle2D: (value: boolean) => void;
+  /** Paso del recorrido que se encuadra automáticamente (null = vista libre). */
+  focusStep: number | null;
 }
 
-function Legend() {
-  return (
-    <div className="legend" aria-label="Leyenda">
-      <span><span className="sw" style={{ background: STATUS_COLOR.OBSERVED }} /> Leído por RFID</span>
-      <span><span className="sw" style={{ background: STATUS_COLOR.EXPECTED }} /> Sin lectura reciente</span>
-      <span><span className="sw" style={{ background: STATUS_COLOR.PENDING_VERIFICATION }} /> ⚠ Por verificar</span>
-      <span><span className="sw sw-outline" style={{ borderColor: '#2f6fb0' }} /> Ubicación registrada</span>
-      <span><span className="sw sw-ghost" /> ◇ Dónde se leyó</span>
-      <span><span className="sw" style={{ background: '#c2412d' }} /> ⏳ Vence pronto</span>
-      <span className="legend-note">Ubicaciones según el registro; RFID no da posición exacta.</span>
-    </div>
-  );
-}
+export interface SceneLayers { labels: boolean; ambient: boolean }
 
-export default function TwinView({ state, onSelect, onToggle2D }: Props) {
+export default function TwinView({ state, onSelect, onToggle2D, focusStep }: Props) {
   const webgl = useMemo(() => hasWebGL(), []);
-  const [resetViewRequest, setResetViewRequest] = useState(0);
+  const [resetView, setResetView] = useState(0);
+  const [zoom, setZoom] = useState({ n: 0, dir: 1 });
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [layers, setLayers] = useState<SceneLayers>({ labels: true, ambient: true });
+  const [full, setFull] = useState(false);
+  const host = useRef<HTMLDivElement>(null);
   const expiryRiskLots = useMemo(() => new Set(
     computeAnalytics(state).flatMap((a) => a.expiryRisks.filter((r) => r.remainingAtExpiry > 0).map((r) => r.lotId)),
-  ), [state]);
+  ), [state.units, state.lots, state.skus, state.dailyDemand]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onFs = () => setFull(document.fullscreenElement === host.current);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const toggleFull = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void host.current?.requestFullscreen?.();
+  };
 
   const use2D = state.ui.force2D || !webgl;
   const fallback = <Warehouse2D state={state} expiryRiskLots={expiryRiskLots} onSelect={onSelect} />;
 
   return (
-    <div className="twin">
-      <div className="twin-toolbar">
-        <span className="twin-title">Gemelo digital · {state.warehouse.name}</span>
-        <span className="twin-source">Lecturas <strong>RFID simuladas</strong> · lectores reales y beacons se conectan después</span>
-        {!use2D && (
-          <button type="button" className="btn-small" onClick={() => setResetViewRequest((n) => n + 1)}>
-            Vista general
-          </button>
-        )}
-        <button type="button" className="btn-small" onClick={() => onToggle2D(!state.ui.force2D)} disabled={!webgl}>
-          {use2D ? 'Ver en 3D' : 'Vista 2D'}
-        </button>
-        {!webgl && <span className="warn-inline">WebGL no disponible: vista 2D con las mismas acciones.</span>}
-      </div>
+    <div className="twin-card" ref={host} data-testid="twin">
       <div className="twin-stage">
-        {/* El Canvas se mantiene montado al pasar a 2D: desmontarlo con etiquetas <Html> de drei
-            provoca errores de React ("removeChild"). Solo se oculta. */}
+        {/* El Canvas se mantiene montado al pasar a 2D (desmontarlo con <Html> de drei provoca errores de React). */}
         {use2D && fallback}
         {webgl && (
           <div className="scene-host" style={{ display: use2D ? 'none' : 'block' }}>
             <SceneErrorBoundary fallback={fallback}>
-              <Suspense fallback={<div className="loading">Cargando escena 3D…</div>}>
-                <WarehouseScene state={state} expiryRiskLots={expiryRiskLots} onSelect={onSelect} resetViewRequest={resetViewRequest} />
+              <Suspense fallback={<div className="loading">Cargando gemelo digital…</div>}>
+                <WarehouseScene
+                  state={state}
+                  expiryRiskLots={expiryRiskLots}
+                  onSelect={onSelect}
+                  resetViewRequest={resetView}
+                  zoomRequest={zoom}
+                  focusStep={focusStep}
+                  layers={layers}
+                />
               </Suspense>
             </SceneErrorBoundary>
           </div>
         )}
-        {!use2D && <div className="twin-hint">Clic en un pallet: ver ficha · Arrastrar: girar · Rueda: zoom</div>}
       </div>
-      <Legend />
+
+      <div className="tools">
+        <button type="button" className={`tool${layersOpen ? ' is-on' : ''}`} onClick={() => setLayersOpen((v) => !v)} aria-label="Capas" aria-expanded={layersOpen}>
+          <Layers size={20} />
+        </button>
+        <button type="button" className={`tool${!use2D ? ' is-on' : ''}`} onClick={() => onToggle2D(!state.ui.force2D)} disabled={!webgl}
+          aria-label={use2D ? 'Ver en 3D' : 'Vista 2D'} title={use2D ? 'Ver en 3D' : 'Vista 2D'}>
+          <Box size={20} />
+        </button>
+        <button type="button" className="tool" onClick={toggleFull} aria-label={full ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+          {full ? <Minimize size={20} /> : <Maximize size={20} />}
+        </button>
+        {!use2D && (
+          <button type="button" className="tool" onClick={() => setResetView((n) => n + 1)} aria-label="Vista general" title="Vista general">
+            <RotateCcw size={18} />
+          </button>
+        )}
+      </div>
+      {layersOpen && (
+        <div className="layers-menu" role="group" aria-label="Capas del gemelo">
+          <label><input type="checkbox" checked={layers.labels} onChange={(e) => setLayers({ ...layers, labels: e.target.checked })} /> Señalización y etiquetas</label>
+          <label><input type="checkbox" checked={layers.ambient} onChange={(e) => setLayers({ ...layers, ambient: e.target.checked })} /> Animación ambiental</label>
+        </div>
+      )}
+      {!use2D && (
+        <div className="zoom">
+          <button type="button" onClick={() => setZoom((z) => ({ n: z.n + 1, dir: 1 }))} aria-label="Acercar"><Plus size={18} /></button>
+          <button type="button" onClick={() => setZoom((z) => ({ n: z.n + 1, dir: -1 }))} aria-label="Alejar"><Minus size={18} /></button>
+        </div>
+      )}
+      <div className="legend" aria-label="Leyenda">
+        <span><span className="sw" style={{ background: EVENT_COLOR.selected }} />Seleccionado</span>
+        <span><span className="sw" style={{ background: EVENT_COLOR.pending }} />Por verificar</span>
+        <span><span className="sw" style={{ background: EVENT_COLOR.confirmed }} />Discrepancia confirmada</span>
+        <span><span className="sw" style={{ background: EVENT_COLOR.verified }} />Verificado</span>
+      </div>
+      {!webgl && <div className="webgl-note">Vista 2D: WebGL no disponible</div>}
     </div>
   );
 }

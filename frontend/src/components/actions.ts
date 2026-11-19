@@ -5,9 +5,9 @@ import { createDemoApi } from '../api/demoApi';
 import { DEMO_SCENARIO_ID, getScenario, RECEIPT_CLOSE_TIME } from '../engine/scenarios';
 import { SimulatedRfidSource } from '../ingest/readSource';
 import { DEMO_PO_ID } from '../seed/seed';
-import type { View } from '../store/demoState';
+import type { Section, View } from '../store/demoState';
 import type { DemoStore } from '../store/demoStore';
-import { CLAIM_RECOMMENDATION_ID, COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, nextDemoStep, RECEIPT_SCENARIO_ID } from '../store/selectors';
+import { COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, RECEIPT_SCENARIO_ID } from '../store/selectors';
 
 export interface ActionOptions {
   /** Milisegundos entre lecturas simuladas (por defecto: ritmo visible para una presentación). */
@@ -32,7 +32,6 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
   const finishCount = () => {
     store.dispatch({ type: 'SET_PLAYBACK', scenarioId: null });
     store.dispatch({ type: 'SELECT_UNIT', unitId: DEMO_UNIT_ID });
-    actions.setView('alerts');
   };
   /** Reproduce un escenario lectura por lectura (solo visualización: el resultado es el mismo que procesarlo de una vez). */
   const play = (scenarioId: string, events: typeof receiptReads, intervalMs: number, onDone: () => void) => {
@@ -51,9 +50,8 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
     setForce2D: (value: boolean) => store.dispatch({ type: 'SET_FORCE_2D', value }),
     selectDemoUnit: () => { actions.select(DEMO_UNIT_ID); actions.setView('twin'); },
 
-    /** Paso 1 · el camión pasa por el portal RFID del andén (lecturas en vivo) y se cierra la recepción. */
+    /** Paso 1 · el camión pasa por el portal RFID del andén (lecturas en vivo) y se cierra la recepción. Idempotente. */
     startReception: () => {
-      actions.setView('rfid');
       const p = po();
       if (!p || p.status === 'CLOSED' || source?.running) return;
       play(RECEIPT_SCENARIO_ID, receiptReads, options.receiptIntervalMs ?? 380, finishReception);
@@ -61,16 +59,14 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
     /** Plan B: procesa todas las lecturas de inmediato (mismo resultado, sin animación). */
     completeReception: () => {
       source?.stop();
-      actions.setView('rfid');
       const p = po();
       if (!p || p.status === 'CLOSED') return;
       for (const e of receiptReads) if (!processed(e.id)) api.postEvent(e);
       finishReception();
     },
 
-    /** Paso 2 · conteo cíclico del pasillo 4 con lector de mano (lecturas en vivo). */
+    /** Paso 2 · conteo cíclico del pasillo D con lector de mano (lecturas en vivo). */
     runDemoEvent: () => {
-      actions.setView('rfid');
       if (processed(DEMO_EVENT_ID) || source?.running) return;
       play(COUNT_SCENARIO_ID, countReads, options.countIntervalMs ?? 140, finishCount);
     },
@@ -88,28 +84,24 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
     openAnalytics: () => actions.setView('analytics'),
     approve: (recommendationId: string) => { api.approveRecommendation(recommendationId); },
     reject: (recommendationId: string) => store.dispatch({ type: 'REJECT_RECOMMENDATION', recommendationId }),
-    /** Paso 5 · una persona aprueba: reclamo del faltante (si existe) y revisión del stock de mochilas. */
+    /** Paso 5 · una persona aprueba la recomendación de sobrestock (solo con el botón; avanzar no aprueba). */
     approveDemoRecommendation: () => {
-      actions.setView('analytics');
-      const s = store.getState();
-      for (const id of [CLAIM_RECOMMENDATION_ID, DEMO_RECOMMENDATION_ID]) {
-        if (s.recommendations.find((r) => r.id === id)?.status === 'PROPOSED') api.approveRecommendation(id);
+      if (store.getState().recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status === 'PROPOSED') {
+        api.approveRecommendation(DEMO_RECOMMENDATION_ID);
       }
     },
     openMeasure: () => actions.setView('measure'),
+    setSection: (section: Section) => store.dispatch({ type: 'SET_SECTION', section }),
+    goStep: (step: number) => {
+      store.dispatch({ type: 'SET_SECTION', section: 'resumen' });
+      store.dispatch({ type: 'SET_STEP', step });
+    },
+    nextStep: () => actions.goStep(store.getState().ui.step + 1),
+    prevStep: () => actions.goStep(store.getState().ui.step - 1),
+    openDrawer: () => store.dispatch({ type: 'SET_DRAWER', open: true }),
+    closeDrawer: () => store.dispatch({ type: 'SET_DRAWER', open: false }),
     setAlertInReview: (alertId: string) => store.dispatch({ type: 'SET_ALERT_STATUS', alertId, status: 'IN_REVIEW' }),
     reset: () => { source?.stop(); source = null; api.resetDemo(); },
-    nextStep: () => {
-      switch (nextDemoStep(store.getState())) {
-        case 'receive': return actions.startReception();
-        case 'count': return actions.runDemoEvent();
-        case 'alert': return actions.setView('alerts');
-        case 'analytics': return actions.openAnalytics();
-        case 'approve': return actions.approveDemoRecommendation();
-        case 'measure': return actions.openMeasure();
-        default: return undefined;
-      }
-    },
   };
   return actions;
 }

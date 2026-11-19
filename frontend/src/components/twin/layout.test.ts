@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../store/demoState';
 import { demoReducer } from '../../store/demoReducer';
-import { nextDemoStep } from '../../store/selectors';
+import { demoSteps } from '../../store/selectors';
 import { AISLE_W, FRONT_Z, PORTAL_Z, RACK_DEPTH, STORAGE_Z, aisleLayouts, locationPositions, rackLayouts } from './layout';
 
 describe('layout del gemelo (derivado del estado)', () => {
@@ -14,7 +14,7 @@ describe('layout del gemelo (derivado del estado)', () => {
   });
 
   it('niveles más altos se dibujan más arriba', () => {
-    expect(pos.get('P2-I03-N3')![1]).toBeGreaterThan(pos.get('P2-I03-N1')![1]);
+    expect(pos.get('B-03-03')![1]).toBeGreaterThan(pos.get('B-03-01')![1]);
   });
 
   it('pasillos paralelos: racks a ambos lados sin solaparse y con pasillo libre entre ellos', () => {
@@ -30,32 +30,29 @@ describe('layout del gemelo (derivado del estado)', () => {
   it('el andén con el portal RFID está delante de los racks', () => {
     expect(PORTAL_Z).toBeGreaterThan(STORAGE_Z);
     expect(FRONT_Z).toBeGreaterThan(PORTAL_Z);
-    expect(pos.get('REC-01')![2]).toBeGreaterThan(pos.get('P1-I05-N1')![2]);
+    expect(pos.get('REC-01')![2]).toBeGreaterThan(pos.get('A-05-01')![2]);
   });
 
-  it('P2-I03-N1 (registrada) y P4-D02-N2 (leída) están en zonas distintas', () => {
-    expect(pos.get('P2-I03-N1')![0]).toBeLessThan(pos.get('P4-D02-N2')![0]);
+  it('B-03-01 (registrada) y D-07-02 (leída) están en zonas distintas', () => {
+    expect(pos.get('B-03-01')![0]).toBeLessThan(pos.get('D-07-02')![0]);
   });
 });
 
-describe('recorrido guiado derivado del estado (Detectar · Priorizar · Actuar · Medir)', () => {
-  it('avanza receive -> count -> alert -> analytics -> approve -> measure -> done', () => {
+describe('recorrido de 6 pasos: estado "hecho" derivado del estado, navegación explícita', () => {
+  it('cada paso se completa con su acción o al avanzar; avanzar no aprueba', () => {
+    const done = (st: ReturnType<typeof createInitialState>) => demoSteps(st).map((x) => x.done);
     let s = createInitialState();
-    expect(nextDemoStep(s)).toBe('receive');
+    expect(demoSteps(s).map((x) => x.id)).toEqual(['visualize', 'detect', 'alert', 'analyze', 'recommend', 'register']);
+    expect(done(s)).toEqual([false, false, false, false, false, false]);
     s = demoReducer(s, { type: 'RUN_SCENARIO', scenarioId: 'DEMO_RECEIPT_001' });
     s = demoReducer(s, { type: 'CLOSE_RECEIPT', purchaseOrderId: 'OC-2026-1187', closedAt: '2026-11-19T08:03:00Z' });
-    expect(nextDemoStep(s)).toBe('count');
     s = demoReducer(s, { type: 'RUN_SCENARIO', scenarioId: 'DEMO_COUNT_P4' });
-    expect(nextDemoStep(s)).toBe('alert');
-    s = demoReducer(s, { type: 'SET_VIEW', view: 'alerts' });
-    expect(nextDemoStep(s)).toBe('analytics');
-    s = demoReducer(s, { type: 'SET_VIEW', view: 'analytics' });
-    expect(nextDemoStep(s)).toBe('approve');
+    expect(done(s).slice(0, 2)).toEqual([true, true]);
+    s = demoReducer(s, { type: 'SET_STEP', step: 5 });
+    expect(done(s)).toEqual([true, true, true, true, false, false]);
+    expect(s.recommendations.find((r) => r.id === 'rec-moc-001')!.status).toBe('PROPOSED');
     s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-moc-001' });
-    expect(nextDemoStep(s)).toBe('approve'); // falta aprobar o rechazar el reclamo
-    s = demoReducer(s, { type: 'APPROVE_RECOMMENDATION', recommendationId: 'rec-claim-oc-2026-1187' });
-    expect(nextDemoStep(s)).toBe('measure');
-    s = demoReducer(s, { type: 'SET_VIEW', view: 'measure' });
-    expect(nextDemoStep(s)).toBe('done');
+    expect(done(s)).toEqual([true, true, true, true, true, true]);
+    expect(demoReducer(s, { type: 'SET_STEP', step: 9 }).ui.step).toBe(5);
   });
 });

@@ -16,7 +16,10 @@ export interface Location { id: string; rackId: string; level: number; slot: num
 
 export interface SKU {
   id: string;
+  /** Nombre comercial (puede venir del ERP/WMS). Si falta, la UI muestra el SKU. */
   name: string;
+  /** Identificador en el sistema de origen (ERP/WMS), para conciliar importaciones. */
+  externalId?: string;
   category?: string;
   unitCost: number; // USD por unidad base
   hasExpiry: boolean;
@@ -34,6 +37,10 @@ export type LogisticUnitType = 'PALLET' | 'BOX';
  */
 export type VerificationStatus = 'EXPECTED' | 'OBSERVED' | 'PENDING_VERIFICATION' | 'CONFIRMED';
 
+/**
+ * Unidad logística: pallet o caja. Las LÍNEAS de un pallet (equivalente a PalletItem) son sus cajas hijas,
+ * cada una con su lote → SKU y su cantidad. Un pallet con lotId null y cajas de varios SKU es un pallet MIXTO.
+ */
 export interface LogisticUnit {
   id: string;
   type: LogisticUnitType;

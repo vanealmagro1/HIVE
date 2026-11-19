@@ -3,7 +3,7 @@
 // estratégico: 10.000–20.000 unidades físicas). No usa nombres, marcas ni datos de empresas reales.
 //
 // Estructura:
-//   Zona A Útiles escolares (P1–P2) · Zona B Tecnología y accesorios (P3–P4) · Zona C Oficina y consumibles (P5–P6)
+//   Zona A Útiles escolares (pasillos A–B) · Zona B Tecnología y accesorios (C–D) · Zona C Oficina y consumibles (E–F)
 //   Cada pasillo tiene un rack a cada lado (I/D) de 5 bahías × 3 niveles → 180 ubicaciones de almacenamiento.
 //   Andén de recepción con portal RFID y 4 posiciones de recepción (REC-01…REC-04).
 //   Productos de volumen en pallets de un solo lote; productos pequeños en cajas sueltas (todas con etiqueta RFID).
@@ -51,7 +51,7 @@ export function buildStructure(): { zones: Zone[]; racks: Rack[]; locations: Loc
       const aisle = zi * AISLES_PER_ZONE + k;
       for (const side of ['I', 'D'] as const) {
         const rackId = `R-P${aisle}${side}`;
-        racks.push({ id: rackId, zoneId: z.id, name: `Pasillo ${aisle} ${side === 'I' ? 'izq.' : 'der.'}`, aisle, side });
+        racks.push({ id: rackId, zoneId: z.id, name: `Pasillo ${aisleLetter(aisle)} ${side === 'I' ? 'izq.' : 'der.'}`, aisle, side });
         for (let bay = 1; bay <= BAYS; bay += 1) {
           for (let level = 1; level <= LEVELS; level += 1) {
             locations.push({ id: locationId(aisle, side, bay, level), rackId, level, slot: bay });
@@ -67,8 +67,15 @@ export function buildStructure(): { zones: Zone[]; racks: Rack[]; locations: Loc
   return { zones, racks, locations };
 }
 
+export const aisleLetter = (aisle: number) => 'ABCDEFGHIJ'[aisle - 1] ?? String(aisle);
+
+/**
+ * Código de ubicación PASILLO-BAHÍA-NIVEL (p. ej. B-03-01). Lado izquierdo: bahías 01–05;
+ * lado derecho: 06–10. `bay` es la posición física 1–5 a lo largo del rack.
+ */
 export function locationId(aisle: number, side: 'I' | 'D', bay: number, level: number): string {
-  return `P${aisle}-${side}${String(bay).padStart(2, '0')}-N${level}`;
+  const n = side === 'I' ? bay : bay + BAYS;
+  return `${aisleLetter(aisle)}-${String(n).padStart(2, '0')}-${String(level).padStart(2, '0')}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -225,6 +232,27 @@ export function generateInventory(opts: {
         });
       }
     }
+  }
+  // Pallets MIXTOS: cajas sueltas de 2–3 SKU distintos que se consolidan en un pallet. NO crea stock nuevo:
+  // reubica cajas existentes (cada una conserva su lote → SKU y cantidad); el pallet no tiene lote propio.
+  for (let m = 0; m < 6; m += 1) {
+    const zoneId = STORAGE_ZONES[m % STORAGE_ZONES.length].id;
+    const zoneOf = (u: LogisticUnit) => rackZone.get(opts.locations.find((l) => l.id === u.expectedLocationId)?.rackId ?? '');
+    const loose = units.filter((u) => u.type === 'BOX' && u.parentId === null && zoneOf(u) === zoneId);
+    const bySku = [...new Set(loose.map((u) => u.lotId!))];
+    for (let i = bySku.length - 1; i > 0; i -= 1) { const j = Math.floor(rnd() * (i + 1)); [bySku[i], bySku[j]] = [bySku[j], bySku[i]]; }
+    const chosenLots = bySku.slice(0, between(2, 3));
+    const spot = takePalletSpot(zoneId);
+    if (!spot || chosenLots.length < 2) continue;
+    palletSeq += 1;
+    const palletId = `PAL-${palletSeq}`;
+    let qty = 0;
+    for (const lotId of chosenLots) {
+      const box = loose.find((u) => u.lotId === lotId)!;
+      Object.assign(box, { parentId: palletId, expectedLocationId: spot.id, observedLocationId: spot.id });
+      qty += box.quantityBaseUnits;
+    }
+    units.push(unit({ id: palletId, type: 'PALLET', parentId: null, lotId: null, quantityBaseUnits: qty, expectedLocationId: spot.id }));
   }
   return { skus, lots, units, dailyDemand };
 }

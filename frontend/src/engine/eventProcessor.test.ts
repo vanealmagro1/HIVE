@@ -9,7 +9,7 @@ import { processEvent } from './eventProcessor';
 const moveEvent = getScenario('DEMO_MOVE_001').events[0];
 const missedEvent = getScenario('DEMO_MISSING_001').events[0];
 
-describe('evento evt-demo-001 (PAL-001 observado en P4-D02-N2)', () => {
+describe('evento evt-demo-001 (PAL-001 observado en D-07-02)', () => {
   const s0 = createInitialState();
   const { state: s1, outcome } = processEvent(s0, moveEvent);
   const pal = s1.units.find((u) => u.id === 'PAL-001')!;
@@ -17,12 +17,12 @@ describe('evento evt-demo-001 (PAL-001 observado en P4-D02-N2)', () => {
   it('se aplica con fuente SIMULATED', () => {
     expect(outcome).toBe('APPLIED');
     expect(s1.events).toHaveLength(1);
-    expect(s1.events[0]).toMatchObject({ id: 'evt-demo-001', source: 'SIMULATED', unitId: 'PAL-001', locationHintId: 'P4-D02-N2' });
+    expect(s1.events[0]).toMatchObject({ id: 'evt-demo-001', source: 'SIMULATED', unitId: 'PAL-001', locationHintId: 'D-07-02' });
   });
 
   it('registra la observación sin mutar la ubicación esperada', () => {
-    expect(pal.expectedLocationId).toBe('P2-I03-N1');
-    expect(pal.observedLocationId).toBe('P4-D02-N2');
+    expect(pal.expectedLocationId).toBe('B-03-01');
+    expect(pal.observedLocationId).toBe('D-07-02');
     expect(pal.verificationStatus).toBe('PENDING_VERIFICATION');
     expect(pal.verificationStatus).not.toBe('CONFIRMED');
     expect(pal.lastObservedAt).toBe('2026-11-19T09:15:00Z');
@@ -32,7 +32,7 @@ describe('evento evt-demo-001 (PAL-001 observado en P4-D02-N2)', () => {
     expect(s1.discrepancies).toHaveLength(1);
     expect(s1.discrepancies[0]).toMatchObject({
       id: 'disc-demo-001', kind: 'LOCATION_MISMATCH', status: 'PENDING_VERIFICATION',
-      expectedLocationId: 'P2-I03-N1', observedLocationId: 'P4-D02-N2', evidenceEventIds: ['evt-demo-001'],
+      expectedLocationId: 'B-03-01', observedLocationId: 'D-07-02', evidenceEventIds: ['evt-demo-001'],
     });
     expect(s1.discrepancies[0].description).toContain('pendiente de verificación');
     expect(s1.alerts).toHaveLength(1);
@@ -81,8 +81,8 @@ describe('ausencia de lectura', () => {
     const { state } = processEvent(s0, missedEvent);
     const pal = state.units.find((u) => u.id === 'PAL-007')!;
     expect(pal.verificationStatus).toBe('PENDING_VERIFICATION');
-    expect(pal.expectedLocationId).toBe('P6-D01-N1');
-    expect(pal.observedLocationId).toBe('P6-D01-N1'); // última lectura conocida (inventario RFID previo); no se borra
+    expect(pal.expectedLocationId).toBe('F-06-01');
+    expect(pal.observedLocationId).toBe('F-06-01'); // última lectura conocida (inventario RFID previo); no se borra
     expect(state.discrepancies[0]).toMatchObject({ kind: 'NOT_OBSERVED', status: 'PENDING_VERIFICATION' });
     expect(state.alerts[0].priority).toBe('MEDIUM');
     expect(state.alerts[0].description).toContain('No implica pérdida confirmada');
@@ -102,7 +102,7 @@ describe('validación de eventos', () => {
     }
   });
   it('una observación coherente marca OBSERVED sin discrepancia', () => {
-    const r = processEvent(s0, { ...moveEvent, id: 'evt-ok', locationHintId: 'P2-I03-N1' });
+    const r = processEvent(s0, { ...moveEvent, id: 'evt-ok', locationHintId: 'B-03-01' });
     expect(r.state.units.find((u) => u.id === 'PAL-001')!.verificationStatus).toBe('OBSERVED');
     expect(r.state.discrepancies).toEqual([]);
     expect(r.state.alerts).toEqual([]);
@@ -112,7 +112,7 @@ describe('validación de eventos', () => {
 describe('recomendaciones y tareas', () => {
   it('existe rec-moc-001 PROPOSED con impacto USD 2400 y rec-tin-001 USD 720; CAL-001 sin recomendación', () => {
     const s = createInitialState();
-    expect(s.recommendations.find((r) => r.id === 'rec-moc-001')).toMatchObject({ status: 'PROPOSED', estimatedImpactUsd: 2400, title: 'Revisar stock y evaluar redistribución' });
+    expect(s.recommendations.find((r) => r.id === 'rec-moc-001')).toMatchObject({ status: 'PROPOSED', estimatedImpactUsd: 2400, title: 'Redistribuir 300 unidades' });
     expect(s.recommendations.find((r) => r.id === 'rec-tin-001')).toMatchObject({ type: 'PRIORITIZE_FEFO', estimatedImpactUsd: 720 });
     expect(s.recommendations.some((r) => r.skuId === 'CAL-001')).toBe(false);
   });

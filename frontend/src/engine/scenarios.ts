@@ -36,7 +36,7 @@ function receptionReads(): InventoryEvent[] {
 
 export const RECEIPT_CLOSE_TIME = '2026-11-19T08:03:00Z';
 
-/** Lectura clave del guion: el lector de mano detecta PAL-001 (registrado en P2) en el pasillo 4. */
+/** Lectura clave del guion: el lector de mano detecta PAL-001 (registrado en el pasillo B) en el pasillo D. */
 const DEMO_MOVE_EVENT: InventoryEvent = {
   id: 'evt-demo-001',
   scenarioId: 'DEMO_MOVE_001',
@@ -45,21 +45,23 @@ const DEMO_MOVE_EVENT: InventoryEvent = {
   receivedAt: '2026-11-19T09:15:02Z',
   unitId: 'PAL-001',
   type: 'OBSERVATION',
-  locationHintId: 'P4-D02-N2',
-  evidenceNote: 'Lectura RFID SIMULADA del lector de mano asociada a P4-D02-N2 (Zona B, pasillo 4). No es una lectura real ni confirma la posición exacta.',
+  locationHintId: 'D-07-02',
+  evidenceNote: 'Lectura RFID SIMULADA del lector de mano asociada a D-07-02 (Zona B, pasillo D). No es una lectura real ni confirma la posición exacta.',
   channel: 'RFID_HANDHELD',
   readerId: 'LECTOR-MANO-01',
   rssi: -61,
 };
 
 /**
- * Conteo cíclico del pasillo P4 con lector de mano: el operario recorre de la bahía 5 (frente) a la 1 y lee
- * cada etiqueta. Todas responden en su ubicación salvo una sorpresa: PAL-001, registrado en el pasillo 2.
+ * Conteo cíclico del pasillo D con lector de mano: el operario recorre de la bahía 5 (frente) a la 1 y lee
+ * cada etiqueta. Todas responden en su ubicación salvo una sorpresa: PAL-001, registrado en el pasillo B.
  */
 function aisleCountReads(): InventoryEvent[] {
   const seed = createSeed();
-  const roots = seed.units.filter((u) => !u.parentId && u.expectedLocationId.startsWith('P4-'));
-  const bay = (loc: string) => Number(loc.slice(4, 6));
+  const locs = new Map(seed.locations.map((l) => [l.id, l]));
+  const aisleOf = new Map(seed.racks.map((r) => [r.id, r.aisle]));
+  const roots = seed.units.filter((u) => !u.parentId && aisleOf.get(locs.get(u.expectedLocationId)?.rackId ?? '') === 4);
+  const bay = (loc: string) => locs.get(loc)?.slot ?? 0;
   roots.sort((a, b) => bay(b.expectedLocationId) - bay(a.expectedLocationId) || a.expectedLocationId.localeCompare(b.expectedLocationId));
   const at = roots.findIndex((u) => bay(u.expectedLocationId) < 2);
   const ordered: (InventoryEvent | (typeof roots)[number])[] = [...roots];
@@ -80,7 +82,7 @@ function aisleCountReads(): InventoryEvent[] {
       unitId: unit.id,
       type: 'OBSERVATION',
       locationHintId: unit.expectedLocationId,
-      evidenceNote: 'Lectura RFID SIMULADA del lector de mano durante el conteo cíclico del pasillo 4.',
+      evidenceNote: 'Lectura RFID SIMULADA del lector de mano durante el conteo cíclico del pasillo D.',
       channel: 'RFID_HANDHELD',
       readerId: 'LECTOR-MANO-01',
       rssi: -52 - ((i * 5) % 18),
@@ -104,20 +106,20 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: 'DEMO_COUNT_P4',
-    title: 'Conteo del pasillo 4 con lector de mano',
-    description: 'Un operario recorre el pasillo 4 con el lector de mano RFID: todo responde en su lugar salvo PAL-001.',
+    title: 'Conteo del pasillo D con lector de mano',
+    description: 'Un operario recorre el pasillo D con el lector de mano RFID: todo responde en su lugar salvo PAL-001.',
     events: aisleCountReads(),
   },
   {
     id: 'DEMO_MOVE_001',
     title: 'Lectura en ubicación distinta',
-    description: 'El lector RFID detecta PAL-001 (mochilas) en el pasillo 4, aunque está registrado en el pasillo 2.',
+    description: 'El lector RFID detecta PAL-001 (mochilas) en el pasillo D, aunque está registrado en el pasillo B.',
     events: [DEMO_MOVE_EVENT],
   },
   {
     id: 'DEMO_MISSING_001',
     title: 'Ausencia de lectura',
-    description: 'PAL-007 (calculadoras) no responde en el recorrido simulado del pasillo 6.',
+    description: 'PAL-007 (calculadoras) no responde en el recorrido simulado del pasillo F.',
     events: [{
       id: 'evt-demo-002',
       scenarioId: 'DEMO_MISSING_001',
@@ -127,7 +129,7 @@ export const SCENARIOS: Scenario[] = [
       unitId: 'PAL-007',
       type: 'MISSED_READ',
       locationHintId: null,
-      evidenceNote: 'Recorrido RFID SIMULADO del pasillo 6 sin lectura de PAL-007. La ausencia de lectura no implica pérdida.',
+      evidenceNote: 'Recorrido RFID SIMULADO del pasillo F sin lectura de PAL-007. La ausencia de lectura no implica pérdida.',
     }],
   },
 ];

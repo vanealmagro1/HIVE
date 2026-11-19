@@ -1,9 +1,12 @@
+import { MapPin } from 'lucide-react';
 import { unitDetail } from '../../domain/inventory';
 import { formatNumber, formatUsd } from '../../domain/format';
 import type { DemoState } from '../../store/demoState';
-import { describeLocation, eventSourceLabel, STATUS_ICON, STATUS_LABEL } from '../../store/selectors';
+import { describeLocation, eventSourceLabel, STATUS_LABEL, unitContents } from '../../store/selectors';
 import type { Actions } from '../actions';
+import { productIcon } from '../layout/Shell';
 
+/** Ficha de una unidad: producto → SKU · cantidad → pallet → ubicación → estado. Pallets mixtos con desglose. */
 export default function UnitPanel({ state, actions }: { state: DemoState; actions: Actions }) {
   const id = state.ui.selectedUnitId;
   const detail = id ? unitDetail(state.units, state.lots, state.skus, id) : null;
@@ -12,68 +15,78 @@ export default function UnitPanel({ state, actions }: { state: DemoState; action
     const boxes = state.units.filter((u) => u.type === 'BOX').length;
     return (
       <div className="panel-empty">
-        <h2>Detalle</h2>
-        <p>Haga clic en un pallet de la bodega para ver qué contiene, dónde está registrado y su última lectura RFID.</p>
-        <p className="muted small">{pallets} pallets y {boxes} cajas con etiqueta RFID en {state.zones.length} zonas y {state.locations.length} ubicaciones.</p>
+        <h2>Selecciona un pallet</h2>
+        <p className="muted">Haz clic en el gemelo para ver qué producto contiene, dónde está y su última lectura.</p>
+        <p className="small muted">{pallets} pallets · {boxes} cajas con etiqueta RFID · {state.locations.length} ubicaciones.</p>
       </div>
     );
   }
-  const { unit, lot, sku, children } = detail;
+  const { unit, lot, children } = detail;
+  const c = unitContents(state, unit);
+  const Icon = productIcon(c.skuId);
+  const value = c.lines.reduce((t, l) => t + l.qty * (state.skus.find((k) => k.id === l.skuId)?.unitCost ?? 0), 0);
   const evidence = state.events.filter((e) => e.unitId === unit.id || (unit.parentId && e.unitId === unit.parentId));
   const mismatch = unit.observedLocationId && unit.observedLocationId !== unit.expectedLocationId;
 
   return (
     <div className="unit-panel" data-testid="unit-panel">
-      <div className="eyebrow">{unit.type === 'PALLET' ? 'Pallet' : 'Caja'} con etiqueta RFID</div>
-      <h2>{unit.type === 'PALLET' ? 'Pallet' : 'Caja'} {unit.id}</h2>
-      <div className={`status-badge status-${unit.verificationStatus}`}>
-        {STATUS_ICON[unit.verificationStatus]} {STATUS_LABEL[unit.verificationStatus]}
+      <div className="product-row" style={{ marginBottom: 12 }}>
+        <span className="product-icon"><Icon size={22} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div className="product-name" data-testid="unit-title">{c.title}</div>
+          <div className="product-sub">{c.subtitle}</div>
+        </div>
+        <span className="ref-badge">{unit.id}</span>
       </div>
+      <h2 className="eyebrow" style={{ margin: '0 0 6px' }}>{unit.type === 'PALLET' ? 'Pallet' : 'Caja'} {unit.id}</h2>
+      <span className={`status-badge status-${unit.verificationStatus}`}>{STATUS_LABEL[unit.verificationStatus]}</span>
+
+      {c.kind === 'mixed' && (
+        <div className="mix-lines" data-testid="mix-lines">
+          {c.lines.map((l) => <div key={l.skuId} className="mix-line"><span><strong>{l.name}</strong> <span className="muted">· {l.skuId}</span></span><span>{formatNumber(l.qty)} u</span></div>)}
+        </div>
+      )}
+
       <dl className="kv">
-        <dt>Producto</dt><dd>{sku ? <><strong>{sku.name}</strong> <span className="muted">· {sku.id}</span></> : '—'}</dd>
-        <dt>Cantidad</dt>
-        <dd>
-          {formatNumber(unit.quantityBaseUnits)} u
-          {unit.type === 'PALLET' && children.length > 0 && <span className="muted"> en {children.length} cajas</span>}
-        </dd>
-        <dt>Valor</dt><dd>{sku ? `${formatUsd(unit.quantityBaseUnits * sku.unitCost)} (${formatUsd(sku.unitCost)} / u)` : '—'}</dd>
-        <dt>Lote · vence</dt><dd>{lot?.id ?? '—'} · {lot?.expiryDate ?? 'Sin caducidad'}</dd>
-        <dt>Ubicación registrada</dt><dd><strong>{describeLocation(state, unit.expectedLocationId)}</strong></dd>
-        <dt>Última lectura</dt>
+        <dt>Ubicación</dt><dd><strong><MapPin size={13} /> {describeLocation(state, unit.expectedLocationId)}</strong></dd>
+        <dt>Evidencia</dt>
         <dd className={mismatch ? 'text-warn' : undefined}>
           {!unit.observedLocationId ? 'Sin lecturas registradas'
-            : mismatch ? `${describeLocation(state, unit.observedLocationId)} · distinta de la registrada`
-              : '✔ En su ubicación registrada'}
+            : mismatch ? `Detectada en ${unit.observedLocationId}` : 'En su ubicación registrada'}
           {unit.lastObservedAt && <div className="muted small">{unit.lastObservedAt}</div>}
         </dd>
+        <dt>Valor</dt><dd>{formatUsd(value)}</dd>
+        {c.kind === 'single' && <><dt>Lote · vence</dt><dd>{lot?.id ?? '—'} · {lot?.expiryDate ?? 'Sin caducidad'}</dd></>}
       </dl>
       {children.length > 0 && (
         <details>
-          <summary>Cajas del pallet ({children.length})</summary>
+          <summary>Cajas ({children.length})</summary>
           <ul className="plain-list small">
-            {children.map((c) => (
-              <li key={c.id}>
-                <button type="button" className="link-btn" onClick={() => actions.select(c.id)}>{c.id}</button>
-                {' '}· {formatNumber(c.quantityBaseUnits)} u · {STATUS_LABEL[c.verificationStatus]}
+            {children.map((k) => (
+              <li key={k.id}>
+                <button type="button" className="link-btn" onClick={() => actions.select(k.id)}>{k.id}</button>
+                {' '}· {unitContents(state, k).title} · {formatNumber(k.quantityBaseUnits)} u
               </li>
             ))}
           </ul>
-          <p className="muted small">El stock se calcula sumando las cajas; el pallet no se vuelve a sumar.</p>
+          <p className="muted small">El stock suma cajas; el pallet no se vuelve a sumar.</p>
         </details>
       )}
       {unit.parentId && (
-        <p>Pertenece a <button type="button" className="link-btn" onClick={() => actions.select(unit.parentId!)}>{unit.parentId}</button></p>
+        <p className="small">Pertenece a <button type="button" className="link-btn" onClick={() => actions.select(unit.parentId!)}>{unit.parentId}</button></p>
       )}
-      <h3>Lecturas</h3>
-      {evidence.length === 0 ? <p className="muted small">Sin lecturas registradas en esta sesión.</p> : (
-        <ul className="plain-list small">
-          {evidence.map((e) => (
-            <li key={e.id}>
-              <span className="source-tag">{e.source}</span> {eventSourceLabel(e)} · {e.type === 'OBSERVATION' ? `leído en ${e.locationHintId}` : 'sin respuesta'}
-              <div className="muted">{e.capturedAt} · <code>{e.id}</code></div>
-            </li>
-          ))}
-        </ul>
+      {evidence.length > 0 && (
+        <details>
+          <summary>Lecturas ({evidence.length})</summary>
+          <ul className="plain-list small">
+            {evidence.map((e) => (
+              <li key={e.id}>
+                <span className="source-tag">{e.source}</span> {eventSourceLabel(e)} · {e.type === 'OBSERVATION' ? `en ${e.locationHintId}` : e.type === 'MISSED_READ' ? 'sin respuesta' : 'recepción'}
+                <div className="muted">{e.capturedAt} · <code>{e.id}</code></div>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

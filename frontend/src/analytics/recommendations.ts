@@ -14,7 +14,7 @@ export function buildAnalyticsRecommendations(analytics: SkuAnalytics[]): Recomm
       out.push({
         id: `rec-${a.skuId.toLowerCase()}`,
         type: 'REVIEW_EXCESS',
-        title: 'Revisar stock y evaluar redistribución',
+        title: `Redistribuir ${formatNumber(a.excessUnits)} unidades`,
         reason: `${a.skuName}: cobertura de ${formatNumber(a.coverageDays ?? 0)} días frente a un objetivo de ${a.targetCoverageDays}; `
           + `exceso potencial de ${formatNumber(a.excessUnits)} unidades (${formatUsd(a.excessExposureUsd ?? 0)} estimados).`,
         skuId: a.skuId,

@@ -41,14 +41,14 @@ export default function MeasurePanel({ state }: { state: DemoState }) {
       <div className="metrics" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
         <div className="metric"><div className="metric-label">Cajas recibidas por portal RFID</div><div className="metric-value">{m.receivedBoxes} / {m.announcedBoxes}</div></div>
         <div className="metric"><div className="metric-label">Tiempo de lectura en el andén</div><div className="metric-value">{m.receiptSeconds} s</div></div>
-        <div className="metric"><div className="metric-label">Etiquetas en su lugar · pasillo 4</div><div className="metric-value">{pct === null ? '—' : `${formatNumber(pct, 1)} %`}</div></div>
+        <div className="metric"><div className="metric-label">Etiquetas en su lugar · pasillo D</div><div className="metric-value">{pct === null ? '—' : `${formatNumber(pct, 1)} %`}</div></div>
         <div className="metric"><div className="metric-label">Hallazgos por verificar</div><div className="metric-value">{m.findings} · {formatUsd(m.inReviewUsd)}</div></div>
         <div className="metric"><div className="metric-label">Acciones aprobadas</div><div className="metric-value">{m.tasks} tareas</div></div>
         <div className="metric"><div className="metric-label">Impacto estimado de lo aprobado</div><div className="metric-value">{formatUsd(m.approvedImpactUsd)}</div></div>
       </div>
       <ul className="small" style={{ marginTop: 12 }}>
         <li>{formatNumber(m.reads)} lecturas RFID procesadas ({formatNumber(m.tags)} etiquetas distintas), sin digitar códigos.</li>
-        <li>Conteo del pasillo 4: {m.countMatches} de {m.countReads} etiquetas respondieron en su ubicación registrada.</li>
+        <li>Conteo del pasillo D: {m.countMatches} de {m.countReads} etiquetas respondieron en su ubicación registrada.</li>
         <li>El inventario solo cambió por lo leído en la recepción; los hallazgos esperan verificación humana.</li>
       </ul>
       <div className="result-box ok small">

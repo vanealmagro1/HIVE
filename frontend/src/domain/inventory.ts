@@ -43,7 +43,8 @@ export function hierarchyIssues(units: LogisticUnit[]): string[] {
     if (sum !== u.quantityBaseUnits) {
       issues.push(`${u.id}: declarado ${u.quantityBaseUnits} ≠ suma de cajas ${sum}`);
     }
-    if (kids.some((k) => k.lotId !== u.lotId)) issues.push(`${u.id}: cajas con lote distinto al pallet`);
+    // Pallet de un solo lote: todas sus cajas deben ser de ese lote. Pallet MIXTO (lotId null): líneas de varios SKU.
+    if (u.lotId !== null && kids.some((k) => k.lotId !== u.lotId)) issues.push(`${u.id}: cajas con lote distinto al pallet`);
   }
   return issues;
 }

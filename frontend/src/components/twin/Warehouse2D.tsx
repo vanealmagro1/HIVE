@@ -2,7 +2,7 @@
 // Plano por zonas → pasillos → racks (bahías × niveles). Cada celda es una ubicación.
 import type { LogisticUnit } from '../../domain/types';
 import type { DemoState } from '../../store/demoState';
-import { placeName, STATUS_LABEL, skuOfUnit, unitsWithOpenAlerts } from '../../store/selectors';
+import { placeName, STATUS_LABEL, unitContents, unitsWithOpenAlerts } from '../../store/selectors';
 import { STATUS_COLOR } from './colors';
 
 interface Props {
@@ -29,9 +29,9 @@ export default function Warehouse2D({ state, expiryRiskLots, onSelect }: Props) 
     const cls = ['cell2d', expectedOfGhost.has(locId) ? 'is-expected' : '', observedAt.has(locId) ? 'is-observed' : '',
       list.some((u) => u.id === selectedRootId) ? 'is-selected' : ''].join(' ');
     if (!main) return <div key={locId} className={cls} title={`${locId} · libre`}>{observedAt.has(locId) ? '◇' : ''}</div>;
-    const sku = skuOfUnit(state, main);
+    const contents = unitContents(state, main);
     const risk = main.lotId !== null && expiryRiskLots.has(main.lotId);
-    const label = `${main.id} · ${sku?.name ?? ''} · ${STATUS_LABEL[main.verificationStatus]}${list.length > 1 ? ` · ${list.length} cajas` : ''}`;
+    const label = `${main.id} · ${contents.title} · ${STATUS_LABEL[main.verificationStatus]}${list.length > 1 ? ` · ${list.length} cajas` : ''}`;
     return (
       <button
         key={locId}
@@ -55,7 +55,7 @@ export default function Warehouse2D({ state, expiryRiskLots, onSelect }: Props) 
       {ghosts.length > 0 && (
         <div className="twin2d-notes">
           {ghosts.map((g) => (
-            <span key={g.id} className="ghost-chip">◇ Leído aquí: {g.id} (lectura RFID simulada) en {placeName(state, g.observedLocationId)} · registrado en {g.expectedLocationId}</span>
+            <span key={g.id} className="ghost-chip">◇ Detectado: {g.id} en {placeName(state, g.observedLocationId)} · esperado en {g.expectedLocationId}</span>
           ))}
         </div>
       )}

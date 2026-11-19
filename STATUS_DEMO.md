@@ -1,5 +1,24 @@
 # HIVE — Estado de la demo
 
+> **UI v1.1 (rama `feature/hive-ui-v1-1`)**
+>
+> **Interfaz:**
+> - Rediseño según `docs/design/hive-ui-reference.png`: sidebar, header con una sola etiqueta "Demo simulada", 4 KPI derivados del estado, gemelo isométrico, panel contextual y recorrido de 6 pasos (Visualizar · Detectar · Alertar · Analizar · Recomendar · Registrar).
+> - La recepción RFID está dentro de Visualizar.
+>
+> **Datos e identificación:**
+> - Identificación por producto (producto → SKU · cantidad → pallet → ubicación).
+> - Pallets mixtos con desglose.
+> - Ubicaciones con formato `A-01-01`.
+>
+> **Gemelo 3D:** racks detallados, muelles D1/D2, portal RFID con luz de estado, montacargas ambientales que no se pueden seleccionar, sombras y monitor de rendimiento.
+>
+> **Verificación:**
+> - 60 pruebas OK.
+> - Recorrido en navegador a 1920×1080, 1440×900 y 1366×768 sin scroll horizontal (`docs/evidencia/v1.1/`).
+>
+> **Pendiente:** Reportes (vista pendiente) y regrabar el video con la v1.1. El resto de este documento describe la versión anterior y sigue vigente para la lógica.
+
 Alcance: **prototipo demostrativo vertical**. **No** es el MVP industrial: RF-001…RF-016 y RNF-001…RNF-006
 siguen siendo alcance futuro, salvo lo indicado como parcial. La historia sigue el análisis estratégico:
 **Detectar → Priorizar → Actuar → Medir**, con el inventario llegando por **RFID simulado**.

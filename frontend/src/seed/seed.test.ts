@@ -28,11 +28,11 @@ describe('semilla de demo (bodega de papelería y tecnología, datos sintéticos
     expect(createSeed()).toEqual(createSeed());
   });
 
-  it('guion: PAL-001 (mochilas) registrado en P2-I03-N1, leído en el último inventario RFID; P4-D02-N2 libre', () => {
+  it('guion: PAL-001 (mochilas) registrado en B-03-01, leído en el último inventario RFID; D-07-02 libre', () => {
     const pal = seed.units.find((u) => u.id === 'PAL-001')!;
-    expect(pal.expectedLocationId).toBe('P2-I03-N1');
+    expect(pal.expectedLocationId).toBe('B-03-01');
     expect(pal.verificationStatus).toBe('OBSERVED');
-    expect(pal.observedLocationId).toBe('P2-I03-N1');
+    expect(pal.observedLocationId).toBe('B-03-01');
     expect(seed.units.some((u) => u.expectedLocationId === DEMO_OBSERVED_LOCATION)).toBe(false);
     expect(seed.units.every((u) => !u.expectedLocationId.startsWith('REC-'))).toBe(true); // andén vacío
   });
