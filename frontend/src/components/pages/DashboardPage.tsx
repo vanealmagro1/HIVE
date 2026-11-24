@@ -71,11 +71,13 @@ function LiveCount({ state, actions }: { state: DemoState; actions: Actions }) {
             const read = state.events.some((e) => e.source === 'BLE' && e.unitId === u.id);
             const tone = !read ? 'sim' : v.tone;
             return (
-              <button key={b.unitId} type="button" className={`live-box tone-${tone}`} onClick={() => actions.locateUnit(u.id)} data-testid={`live-box-${b.label}`}>
-                <span className="live-tag">{b.label}</span>
+              <button key={`${b.unitId}-${read}`} type="button" className={`live-box tone-${tone}${read ? ' is-read' : ' is-hidden'}`}
+                onClick={read ? () => actions.locateUnit(u.id) : undefined} data-testid={`live-box-${b.label}`}>
+                <span className="live-tag">{read ? b.label : '?'}</span>
+                {/* El producto se revela solo cuando el lector lee la etiqueta. */}
                 <span className="live-info">
-                  <strong>{unitContents(state, u).title}</strong>
-                  <span>{u.id} · {u.expectedLocationId}</span>
+                  <strong>{read ? unitContents(state, u).title : 'Caja por leer'}</strong>
+                  <span>{read ? `${u.id} · ${u.expectedLocationId}` : `Etiqueta ${b.label} · acerca el lector`}</span>
                 </span>
                 <Chip tone={tone}>{!read ? 'Sin lectura' : v.tone === 'ok' ? 'Verificada' : 'Fuera de lugar'}</Chip>
               </button>

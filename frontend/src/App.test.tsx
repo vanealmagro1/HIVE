@@ -115,9 +115,12 @@ describe('HIVE UI v2 · operaciones', () => {
     render(<App store={store} />);
     expect(screen.getByTestId('live-verified').textContent).toMatch(/^0 de 3/);
     expect(within(screen.getByTestId('live-box-4')).getByText('Sin lectura')).toBeTruthy();
+    expect(screen.getByTestId('live-box-4').textContent).toMatch(/Caja por leer/); // el producto aún no se revela
+    expect(screen.getByTestId('live-box-4').textContent).not.toMatch(/Cuaderno/);
     await user.keyboard('{Alt>}1{/Alt}');
     expect(screen.getByTestId('live-verified').textContent).toMatch(/^1 de 3/);
     expect(within(screen.getByTestId('live-box-4')).getByText('Verificada')).toBeTruthy();
+    expect(screen.getByTestId('live-box-4').textContent).toMatch(/Cuaderno universitario/);
     expect(screen.getAllByText('Beacon · celular').length).toBeGreaterThan(0);
     expect(screen.getByTestId('last-message').textContent).toMatch(/Cuaderno universitario 100 h cuadros grandes \(CJ-0003\) verificada en B-05-03/);
     await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');

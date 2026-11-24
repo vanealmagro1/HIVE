@@ -41,6 +41,17 @@
     @keyframes pop { from { transform: scale(.94); opacity: .4; } }
     ol { margin: 6px 0 0; padding-left: 20px; } code { font-size: 0.78rem; background: #f1f0f5; padding: 1px 4px; border-radius: 4px; }
     .log { font-size: 0.8rem; color: var(--muted); display: grid; gap: 4px; }
+    .scan { min-height: 210px; display: grid; place-items: center; text-align: center; gap: 8px; padding: 22px 16px; }
+    .scan .idle-icon { width: 74px; height: 74px; border-radius: 50%; border: 3px dashed #cfc6ea; display: grid; place-items: center; font-size: 30px; color: var(--purple); animation: pulse 1.6s ease-in-out infinite; }
+    .scan h2 { margin: 0; font-size: 1.1rem; } .scan p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .scan.found { border: 2px solid var(--purple); animation: pop .35s ease-out; }
+    .scan.found.ok { border-color: var(--ok); } .scan.found.warn { border-color: var(--bad); }
+    .scan .big-tag { width: 64px; height: 64px; border-radius: 18px; background: var(--purple); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 1.6rem; }
+    .scan.ok .big-tag { background: var(--ok); } .scan.warn .big-tag { background: var(--bad); }
+    .scan .prod { font-size: 1.35rem; font-weight: 800; line-height: 1.2; }
+    .scan .state { font-weight: 700; font-size: 0.9rem; } .scan.ok .state { color: var(--ok); } .scan.warn .state { color: var(--bad); }
+    details.diagbox summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; font-weight: 600; padding: 4px 2px; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: .6; } }
   </style>
 </head>
 <body>
@@ -55,7 +66,8 @@
     <section class="card diag" id="diag" hidden></section>
     <button class="main" id="start" type="button">Empezar a leer</button>
     <p class="hint" id="hint">Toca "Empezar a leer" y acepta el permiso de Bluetooth.</p>
-    <section id="list" style="display:grid;gap:10px"></section>
+    <section class="card scan" id="scan"></section>
+    <details class="diagbox"><summary>Diagnóstico · señal de todos los beacons</summary><section id="list" style="display:grid;gap:10px;margin-top:8px"></section></details>
     <section class="card log" id="log"><strong style="color:var(--ink)">Enviadas a HIVE</strong><span>Ninguna todavía.</span></section>
   </main>
   <script>
@@ -69,6 +81,8 @@
     const seen = new Map();          // etiqueta -> { rssi: [], last }
     const lastSent = new Map();      // etiqueta|ubicación -> ms
     let leader = null;               // { label, since }
+    let lastSentLabel = null;        // etiqueta enviada mientras sigue pegada
+    let started = false;
     const sentLog = [];
     const $ = (id) => document.getElementById(id);
     const hex = (dv, a, b) => Array.from({ length: b - a }, (_, i) => dv.getUint8(a + i).toString(16).padStart(2, '0')).join('');
@@ -82,6 +96,7 @@
       $('loc').innerHTML = (data.ubicaciones || []).map((u) => `<option value="${u.id}">${u.id}${homes.has(u.id) ? '' : ' · otra ubicación'}</option>`).join('');
       try { const saved = localStorage.getItem('hive-loc'); if (saved) $('loc').value = saved; } catch {}
       renderQuick();
+      renderScan();
       render();
     }
     function setLoc(id) { $('loc').value = id; try { localStorage.setItem('hive-loc', id); } catch {} leader = null; renderQuick(); }
@@ -129,6 +144,7 @@
       const now = Date.now();
       if (!manual && now - (lastSent.get(key) || 0) < DEBOUNCE_MS) return;
       lastSent.set(key, now);
+      lastSentLabel = label;
       const b = CATALOG.find((x) => x.etiqueta === label);
       const ok = b && b.ubicacion === ubicacion;
       try {
@@ -151,9 +167,26 @@
       const ranked = [...seen.entries()].filter(([, s]) => now - s.last < 3000).map(([label, s]) => ({ label, med: median(s.rssi) })).sort((a, b) => b.med - a.med);
       const top = ranked[0];
       const clear = top && top.med >= NEAR_RSSI && (!ranked[1] || top.med - ranked[1].med >= MARGIN_DB);
-      if (!clear) { leader = null; return; }
-      if (!leader || leader.label !== top.label) { leader = { label: top.label, since: now }; return; }
+      if (!clear) { leader = null; lastSentLabel = null; return; }
+      if (!leader || leader.label !== top.label) { leader = { label: top.label, since: now }; lastSentLabel = null; return; }
       if (now - leader.since >= HOLD_MS) send(top.label, top.med);
+    }
+
+    /** Panel principal: el producto solo aparece cuando una caja queda pegada al celular. */
+    function renderScan() {
+      const el = $('scan');
+      if (!started) { el.className = 'card scan'; el.innerHTML = '<div class="idle-icon">📦</div><h2>Lector listo</h2><p>Toca "Empezar a leer" para activar el Bluetooth.</p>'; return; }
+      const b = leader && CATALOG.find((x) => x.etiqueta === leader.label);
+      if (!b) { el.className = 'card scan'; el.innerHTML = '<div class="idle-icon">📡</div><h2>Acerca el celular a una caja</h2><p>La etiqueta se lee al tocarla con el celular.</p>'; return; }
+      const ok = b.ubicacion === $('loc').value;
+      const sent = lastSentLabel === b.etiqueta;
+      el.className = 'card scan found ' + (sent ? (ok ? 'ok' : 'warn') : '');
+      el.innerHTML = `<div class="big-tag">${b.etiqueta}</div>
+        <div class="prod">${b.producto}</div>
+        <p>Caja ${b.unitId} · su lugar ${b.ubicacion}</p>
+        <div class="state">${sent ? (ok ? '✓ Verificada · enviada a HIVE' : '⚠ Fuera de lugar · enviada a HIVE') : 'Leyendo etiqueta…'}</div>
+        ${sent ? '' : `<button class="send" data-label="${b.etiqueta}">Enviar ahora</button>`}`;
+      el.querySelectorAll('button.send').forEach((x) => x.addEventListener('click', () => send(x.dataset.label, median(seen.get(x.dataset.label).rssi), true)));
     }
 
     function render() {
@@ -180,7 +213,7 @@
         await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
         $('start').disabled = true;
         $('start').textContent = 'Leyendo… acerca el celular a una caja';
-        $('hint').textContent = 'Se envía solo cuando una caja queda pegada al celular (o toca "Enviar lectura").';
+        $('hint').textContent = 'Se envía sola cuando la caja queda pegada al celular.';
         navigator.bluetooth.addEventListener('advertisementreceived', (ev) => {
           const b = identify(ev);
           if (!b) return;
@@ -189,7 +222,8 @@
           s.last = Date.now();
           seen.set(b.etiqueta, s);
         });
-        setInterval(() => { evaluate(); render(); }, 400);
+        started = true;
+        setInterval(() => { evaluate(); renderScan(); render(); }, 400);
       } catch (e) {
         $('diag').hidden = false;
         $('diag').innerHTML = `<div class="bad">✘ No se pudo iniciar: ${e.message}. Revisa Bluetooth, Ubicación y el permiso "Dispositivos cercanos" de Chrome.</div>`;
