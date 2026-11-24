@@ -47,6 +47,18 @@
       "unitId": "CJ-0138",
       "producto": "Regla 30 cm estándar",
       "ubicacion": "B-08-02"
+    },
+    {
+      "etiqueta": "01",
+      "beacon": "C7-8A-38-FB-1F",
+      "ids": [
+        "4e419296ef8dd346",
+        "4e419296ef8dd346c4f6e9bae6cec914",
+        "63845:42361"
+      ],
+      "unitId": "CJ-0164",
+      "producto": "Borrador blanco escolar",
+      "ubicacion": "A-03-02"
     }
   ],
   "ubicaciones": [
@@ -65,6 +77,10 @@
     {
       "id": "B-08-02",
       "nombre": "Pasillo B · bahía 08 · nivel 2"
+    },
+    {
+      "id": "A-03-02",
+      "nombre": "Pasillo A · bahía 03 · nivel 2"
     },
     {
       "id": "A-02-01",

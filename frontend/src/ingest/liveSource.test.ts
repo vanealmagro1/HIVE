@@ -35,7 +35,7 @@ describe('lecturas en vivo de beacons', () => {
     const store = createDemoStore();
     const actions = createActions(store);
     expect(store.getState().units.find((u) => u.id === 'CJ-0003')!.verificationStatus).toBe('EXPECTED');
-    expect(beaconCount(store.getState())).toMatchObject({ verified: 0, total: 4, misplaced: 0 });
+    expect(beaconCount(store.getState())).toMatchObject({ verified: 0, total: 5, misplaced: 0 });
 
     const home = liveReadToEvent(read(), store.getState().referenceDate)!;
     actions.api.postEvent(home);
@@ -61,6 +61,6 @@ describe('lecturas en vivo de beacons', () => {
     const actions = createActions(store);
     for (const b of BEACON_BOXES) actions.simulateBeacon(b.label, 'home');
     expect(beaconCount(store.getState())).toMatchObject({ verified: BEACON_BOXES.length, misplaced: 0 });
-    expect(store.getState().lastMessage?.text).toMatch(/Regla 30 cm estándar \(CJ-0138\) verificada en B-08-02/);
+    expect(store.getState().lastMessage?.text).toMatch(/Borrador blanco escolar \(CJ-0164\) verificada en A-03-02/);
   });
 });
