@@ -37,7 +37,7 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
   useEffect(() => { document.querySelector('.content')?.scrollTo?.({ top: 0 }); }, [section]);
   // Lector en vivo (beacons vía el relé local). Sin servidor (pruebas) queda apagado sin errores.
   useEffect(() => { actions.startLive(); return () => actions.stopLive(); }, [actions]);
-  // Plan B del pitch (oculto): Alt+1/2/3 = beacon leído en su ubicación · Alt+Shift+1/2/3 = en otra ubicación.
+  // Plan B del pitch (oculto): Alt+1/2/… = beacon leído en su ubicación · Alt+Shift+1/2/… = en otra ubicación.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey) return;

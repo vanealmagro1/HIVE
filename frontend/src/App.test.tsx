@@ -125,13 +125,10 @@ describe('HIVE UI v2 · operaciones', () => {
     expect(table.textContent).toMatch(/Cuaderno universitario 100 h cuadros grandesCJ-000320 uB-05-03✓ Contada/);
     expect(screen.getByTestId('last-message').textContent).toMatch(/\(CJ-0003\) verificada en B-05-03/);
 
-    await user.keyboard('{Alt>}2{/Alt}');
+    await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');
+    expect(screen.getByTestId('live-boxes').textContent).toBe('2');
     expect(screen.getByTestId('live-units').textContent).toBe('82');
     expect(within(screen.getByTestId('live-table')).getAllByRole('row')[1].textContent).toMatch(/Esferográfico punta fina negro/); // la más reciente arriba
-
-    await user.keyboard('{Alt>}{Shift>}3{/Shift}{/Alt}');
-    expect(screen.getByTestId('live-boxes').textContent).toBe('3');
-    expect(screen.getByTestId('live-units').textContent).toBe('100');
     expect(screen.getByTestId('live-table').textContent).toMatch(/Fuera de lugar/);
     expect(screen.queryByTestId('live-pending')).toBeNull();
     expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
