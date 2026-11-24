@@ -67,13 +67,23 @@
     <button class="main" id="start" type="button">Empezar a leer</button>
     <p class="hint" id="hint">Toca "Empezar a leer" y acepta el permiso de Bluetooth.</p>
     <section class="card scan" id="scan"></section>
-    <details class="diagbox"><summary>Diagnóstico · señal de todos los beacons</summary><section id="list" style="display:grid;gap:10px;margin-top:8px"></section></details>
+    <details class="diagbox"><summary>Diagnóstico · sensibilidad y señal de los beacons</summary>
+      <section class="card" style="margin-top:8px">
+        <label class="loc">Sensibilidad: se lee desde <span id="umbralTxt"></span>
+          <input id="umbral" type="range" min="-75" max="-35" step="1" style="width:100%" />
+        </label>
+        <p class="sub" style="margin:6px 0 0">Más a la izquierda = lee desde más lejos (riesgo de leer otra caja). Pegado ≈ −35 · a 10–20 cm ≈ −50 a −60.</p>
+      </section>
+      <section id="list" style="display:grid;gap:10px;margin-top:8px"></section></details>
     <section class="card log" id="log"><strong style="color:var(--ink)">Enviadas a HIVE</strong><span>Ninguna todavía.</span></section>
   </main>
   <script>
-    const NEAR_RSSI = -42;          // "pegado" a la caja
-    const MARGIN_DB = 10;           // debe ganar claramente al segundo beacon
-    const HOLD_MS = 1000;           // durante al menos 1 s
+    // Sensibilidad (se puede cambiar en "Diagnóstico" o con ?umbral=-55 en la dirección).
+    const params = new URLSearchParams(location.search);
+    const stored = (() => { try { return Number(localStorage.getItem('hive-umbral')); } catch { return NaN; } })();
+    let NEAR_RSSI = Number(params.get('umbral')) || stored || -55;   // señal mínima para "acercado" (~10–20 cm)
+    const MARGIN_DB = 6;            // debe ganar al segundo beacon por al menos 6 dB
+    const HOLD_MS = 600;            // sostenido al menos 0,6 s
     const DEBOUNCE_MS = 8000;       // misma caja + misma ubicación: una lectura cada 8 s
     const GONE_MS = 10000;
     const ESTIMOTE_SERVICE = '0000fe9a-0000-1000-8000-00805f9b34fb';
@@ -230,6 +240,9 @@
       }
     });
 
+    function showUmbral() { $('umbral').value = NEAR_RSSI; $('umbralTxt').textContent = `${NEAR_RSSI} dBm`; }
+    $('umbral').addEventListener('input', () => { NEAR_RSSI = Number($('umbral').value); try { localStorage.setItem('hive-umbral', String(NEAR_RSSI)); } catch {} showUmbral(); leader = null; });
+    showUmbral();
     diag();
     loadCatalog().catch(() => { $('hint').textContent = 'No se pudo cargar el catálogo de beacons desde la laptop.'; });
     pingLaptop(); setInterval(pingLaptop, 4000);

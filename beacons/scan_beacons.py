@@ -35,8 +35,8 @@ from parsers import Packet, address_family, estimate_distance, fmt_distance, par
 
 CATALOG = Path(__file__).with_name("beacons.json")
 OUT_OF_RANGE_S = 10
-NEAR_RSSI = -42      # "pegado" al lector
-MARGIN_DB = 10       # debe ganar claramente al segundo beacon
+NEAR_RSSI = -50      # caja acercada al lector (la antena de la laptop es menos sensible que la del celular)
+MARGIN_DB = 6        # debe ganar al segundo beacon por al menos 6 dB
 DEBOUNCE_S = 8       # misma caja: una lectura cada 8 s
 DEFAULT_RELAY = "http://127.0.0.1:5174/api/lecturas"
 SMOOTHING = 9  # mediana de las últimas lecturas: ignora los picos típicos de BLE
