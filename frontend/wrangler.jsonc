@@ -1,0 +1,21 @@
+// HIVE en Cloudflare Workers (dirección fija: https://hive.<subdominio>.workers.dev).
+// Desplegar: npm run deploy   ·   Probar en local como en la nube: npm run cf:dev
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hive",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // La API del relé la atiende el Worker; todo lo demás son archivos estáticos.
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "Relay" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }],
+  "observability": { "enabled": true },
+  // Sin telemetría de uso de wrangler.
+  "send_metrics": false
+}

@@ -14,16 +14,23 @@ Los beacons son Bluetooth Low Energy, no RFID.
 
 El catálogo está en `beacons.json` (lo usan el celular, la app y el escáner). Etiquetas para imprimir: `etiquetas.html`.
 
-## Día del pitch · arranque (5 min antes)
-1. **Red:** laptop y celular en la misma red. Si el Wi‑Fi del aula falla, activa el **hotspot del celular** y conecta la laptop a él.
-2. **Laptop:** `cd frontend` y `npm run dev:red`. Abre `http://127.0.0.1:5174` en el proyector (Dashboard).
+## Día del pitch · en Cloudflare (recomendado)
+HIVE queda publicado con **dirección fija**: `https://hive.<tu-subdominio>.workers.dev`
+(no necesita servidor en la laptop, ni túnel, ni la misma red, ni ajustes de Chrome: es HTTPS).
+
+1. **Laptop (proyector):** abre `https://hive.<tu-subdominio>.workers.dev` → Dashboard.
    El chip debe decir **"Lector en vivo · conectado"**.
-3. **IP de la laptop:** en la terminal, `ipconfig` → "Dirección IPv4" del Wi‑Fi (hoy: `192.168.100.79`).
-4. **Celular (Chrome):** abre `http://<IP>:5174/lector.html`. Arriba debe decir **"HIVE conectado"**.
-   - Si la IP cambió (otra red/hotspot): en `chrome://flags` → *Insecure origins treated as secure* agrega
-     `http://<IP nueva>:5174` y toca Relaunch.
-   - Bluetooth y Ubicación encendidos; Chrome con permiso "Dispositivos cercanos".
-5. Toca **Empezar a leer**. Prueba una caja y luego **reinicia la demo** (botón ↺ en "Modo simulación").
+2. **Celular (Chrome):** abre `https://hive.<tu-subdominio>.workers.dev/lector` → arriba debe decir
+   **"HIVE conectado"**. Bluetooth y Ubicación encendidos.
+3. Toca **Empezar a leer**, prueba una caja y **reinicia la demo** (↺ en "Modo simulación").
+
+Publicar cambios (desde `frontend/`): `npm run deploy`. La primera vez: `npx wrangler login`.
+
+## Respaldo · servidor local (sin internet)
+1. Laptop y celular en la misma red (o hotspot). `cd frontend` y `npm run dev:red`.
+2. Laptop: `http://127.0.0.1:5174`. Celular: `http://<IP de la laptop>:5174/lector.html`
+   (requiere en `chrome://flags` → *Insecure origins treated as secure* la dirección `http://<IP>:5174`,
+   y que la red de Windows sea **Privada** con Node.js permitido en el firewall).
 
 ## En vivo
 - En el celular elige **dónde estás** (p. ej. `B-05-03`) y acerca el celular a la caja (a pocos cm).
@@ -34,7 +41,8 @@ El catálogo está en `beacons.json` (lo usan el celular, la app y el escáner).
 
 ## Plan B
 - **Sin celular:** el lector puede ser la laptop. Pega la caja a la laptop con
-  `python scan_beacons.py --enviar --ubicacion B-05-03` (desde `beacons/`).
+  `python scan_beacons.py --enviar https://hive.<tu-subdominio>.workers.dev/api/lecturas --ubicacion B-05-03`
+  (o `--enviar` solo, con el servidor local).
 - **Sin Bluetooth:** atajos ocultos en la laptop (con HIVE abierto):
   `Alt+1…5` = beacon 4/7/5/11/01 leído en su ubicación · `Alt+Shift+1…5` = leído fuera de lugar.
 
