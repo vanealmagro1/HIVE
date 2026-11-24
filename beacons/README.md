@@ -15,12 +15,12 @@ Los beacons son Bluetooth Low Energy, no RFID.
 El catálogo está en `beacons.json` (lo usan el celular, la app y el escáner). Etiquetas para imprimir: `etiquetas.html`.
 
 ## Día del pitch · en Cloudflare (recomendado)
-HIVE queda publicado con **dirección fija**: `https://hive.<tu-subdominio>.workers.dev`
+HIVE queda publicado con **dirección fija**: `https://hive.hive-demo.workers.dev`
 (no necesita servidor en la laptop, ni túnel, ni la misma red, ni ajustes de Chrome: es HTTPS).
 
-1. **Laptop (proyector):** abre `https://hive.<tu-subdominio>.workers.dev` → Dashboard.
+1. **Laptop (proyector):** abre `https://hive.hive-demo.workers.dev` → Dashboard.
    El chip debe decir **"Lector en vivo · conectado"**.
-2. **Celular (Chrome):** abre `https://hive.<tu-subdominio>.workers.dev/lector` → arriba debe decir
+2. **Celular (Chrome):** abre `https://hive.hive-demo.workers.dev/lector` → arriba debe decir
    **"HIVE conectado"**. Bluetooth y Ubicación encendidos.
 3. Toca **Empezar a leer**, prueba una caja y **reinicia la demo** (↺ en "Modo simulación").
 
@@ -41,7 +41,7 @@ Publicar cambios (desde `frontend/`): `npm run deploy`. La primera vez: `npx wra
 
 ## Plan B
 - **Sin celular:** el lector puede ser la laptop. Pega la caja a la laptop con
-  `python scan_beacons.py --enviar https://hive.<tu-subdominio>.workers.dev/api/lecturas --ubicacion B-05-03`
+  `python scan_beacons.py --enviar https://hive.hive-demo.workers.dev/api/lecturas --ubicacion B-05-03`
   (o `--enviar` solo, con el servidor local).
 - **Sin Bluetooth:** atajos ocultos en la laptop (con HIVE abierto):
   `Alt+1…5` = beacon 4/7/5/11/01 leído en su ubicación · `Alt+Shift+1…5` = leído fuera de lugar.
