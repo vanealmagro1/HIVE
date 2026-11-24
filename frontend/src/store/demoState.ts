@@ -7,6 +7,7 @@ import type {
   Alert, Discrepancy, InventoryEvent, Movement, Recommendation, SeedData, Task,
 } from '../domain/types';
 import { createSeed } from '../seed/seed';
+import type { LiveStatus } from '../ingest/liveSource';
 
 export type View = 'twin' | 'rfid' | 'inventory' | 'alerts' | 'analytics' | 'measure';
 /** Secciones de la navegación lateral. */
@@ -27,7 +28,7 @@ export interface DemoState extends SeedData {
   audit: AuditEntry[];
   /** playback: escenario cuyas lecturas se están reproduciendo en vivo (solo visualización). */
   /** skuId: producto en foco, compartido por gemelo, gráficas, indicadores y recomendaciones. */
-  ui: { selectedUnitId: string | null; view: View; force2D: boolean; playback: string | null; section: Section; skuId: string | null; focusSeq: number };
+  ui: { selectedUnitId: string | null; view: View; force2D: boolean; playback: string | null; section: Section; skuId: string | null; focusSeq: number; live: LiveStatus };
   /** Último resultado de una acción, para mostrar retroalimentación (p. ej. evento duplicado). */
   lastMessage: { kind: 'info' | 'warning' | 'error'; text: string } | null;
 }
@@ -69,7 +70,7 @@ export function createInitialState(): DemoState {
     tasks: [],
     movements: [],
     audit: [{ seq: 1, message: 'Estado semilla cargado (datos sintéticos, fecha de referencia 2026-11-19).' }],
-    ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null, section: 'dashboard', skuId: null, focusSeq: 0 },
+    ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null, section: 'dashboard', skuId: null, focusSeq: 0, live: 'off' },
     lastMessage: null,
   };
 }

@@ -4,11 +4,13 @@
 import { createDemoApi } from '../api/demoApi';
 import { DEMO_SCENARIO_ID, getScenario, RECEIPT_CLOSE_TIME } from '../engine/scenarios';
 import { SimulatedRfidSource } from '../ingest/readSource';
+import { beaconBox, LiveBeaconSource, liveReadToEvent } from '../ingest/liveSource';
+import type { InventoryEvent } from '../domain/types';
 import { EXECUTION_START_TIME, RECEPTION_CONFIRM_TIME } from '../engine/transfers';
 import { DEMO_PO_ID } from '../seed/seed';
 import type { Section, View } from '../store/demoState';
 import type { DemoStore } from '../store/demoStore';
-import { COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, RECEIPT_SCENARIO_ID } from '../store/selectors';
+import { COUNT_SCENARIO_ID, DEMO_EVENT_ID, DEMO_RECOMMENDATION_ID, DEMO_UNIT_ID, RECEIPT_SCENARIO_ID, unitContents } from '../store/selectors';
 
 export interface ActionOptions {
   /** Milisegundos entre lecturas simuladas (por defecto: ritmo visible para una presentación). */
@@ -22,6 +24,27 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
   const receiptReads = getScenario(RECEIPT_SCENARIO_ID).events;
   const countReads = getScenario(COUNT_SCENARIO_ID).events;
   let source: SimulatedRfidSource | null = null;
+  let live: LiveBeaconSource | null = null;
+  let simSeq = 0;
+
+  /** Una lectura en vivo (beacon): ingesta única + aviso legible + enfoque en el gemelo si está abierto. */
+  const ingestLive = (event: InventoryEvent) => {
+    const res = api.postEvent(event);
+    if (res.status !== 201) return;
+    const s = store.getState();
+    const unit = s.units.find((u) => u.id === event.unitId);
+    if (!unit) return;
+    const name = unitContents(s, unit).title;
+    const ok = event.locationHintId === unit.expectedLocationId;
+    store.dispatch({
+      type: 'SET_MESSAGE',
+      kind: ok ? 'info' : 'warning',
+      text: ok
+        ? `✔ ${name} (${unit.id}) verificada en ${event.locationHintId}`
+        : `⚠ ${name} (${unit.id}) leída en ${event.locationHintId}; su ubicación es ${unit.expectedLocationId}`,
+    });
+    if (s.ui.section === 'gemelo') store.dispatch({ type: 'FOCUS_UNIT', unitId: unit.id });
+  };
 
   const processed = (id: string) => store.getState().events.some((e) => e.id === id);
   const po = () => store.getState().purchaseOrders.find((p) => p.id === DEMO_PO_ID);
@@ -120,6 +143,26 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
       store.dispatch({ type: 'FOCUS_UNIT', unitId });
     },
     setAlertInReview: (alertId: string) => store.dispatch({ type: 'SET_ALERT_STATUS', alertId, status: 'IN_REVIEW' }),
+    /** Escucha el relé local de lecturas en vivo (celular o escáner de la laptop). Idempotente. */
+    startLive: (url = '/api/lecturas/stream') => {
+      if (live?.running) return;
+      live = new LiveBeaconSource('relay', url, store.getState().referenceDate, (status) => store.dispatch({ type: 'SET_LIVE_STATUS', status }));
+      live.start(ingestLive);
+    },
+    stopLive: () => { live?.stop(); live = null; store.dispatch({ type: 'SET_LIVE_STATUS', status: 'off' }); },
+    /**
+     * Plan B del pitch: simula la lectura de un beacon por el mismo camino que una real.
+     * home = en su ubicación (verifica la caja); away = en otra ubicación (genera la alerta).
+     */
+    simulateBeacon: (label: string, where: 'home' | 'away' = 'home') => {
+      const box = beaconBox(label);
+      const unit = box && store.getState().units.find((u) => u.id === box.unitId);
+      if (!box || !unit) return;
+      const ubicacion = where === 'home' ? unit.expectedLocationId : unit.expectedLocationId.startsWith('A-02-01') ? 'B-02-01' : 'A-02-01';
+      simSeq += 1;
+      const ev = liveReadToEvent({ id: `planb-${label}-${Date.now()}-${simSeq}`, beacon: label, ubicacion, rssi: -38, lector: 'celular', t: Date.now() }, store.getState().referenceDate);
+      if (ev) ingestLive(ev);
+    },
     reset: () => { source?.stop(); source = null; api.resetDemo(); },
   };
   return actions;

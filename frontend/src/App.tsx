@@ -11,6 +11,7 @@ import EvidenceDrawer, { type EvidenceTarget } from './components/pages/Evidence
 import InventoryPage from './components/pages/InventoryPage';
 import TwinPage from './components/pages/TwinPage';
 import TwinView from './components/twin/TwinView';
+import { BEACON_BOXES } from './seed/seed';
 import { demoStore, useDemoState, type DemoStore } from './store/demoStore';
 
 /** Aviso breve de la última acción; se oculta solo a los pocos segundos. */
@@ -34,6 +35,20 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
   const section = state.ui.section;
   // Cada sección empieza desde arriba (no hereda el scroll de la anterior).
   useEffect(() => { document.querySelector('.content')?.scrollTo?.({ top: 0 }); }, [section]);
+  // Lector en vivo (beacons vía el relé local). Sin servidor (pruebas) queda apagado sin errores.
+  useEffect(() => { actions.startLive(); return () => actions.stopLive(); }, [actions]);
+  // Plan B del pitch (oculto): Alt+1/2/3 = beacon leído en su ubicación · Alt+Shift+1/2/3 = en otra ubicación.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey) return;
+      const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      if (i < 0 || !BEACON_BOXES[i]) return;
+      e.preventDefault();
+      actions.simulateBeacon(BEACON_BOXES[i].label, e.shiftKey ? 'away' : 'home');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [actions]);
   useEffect(() => { document.title = `HIVE · ${NAV.find((n) => n.section === section)?.label ?? ''}`; }, [section]);
 
   const twin = (

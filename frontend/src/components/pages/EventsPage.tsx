@@ -110,11 +110,11 @@ export default function EventsPage({ state, actions, onEvidence }: { state: Demo
           <thead><tr><th>Fecha y hora</th><th>Evento</th><th>Unidad logística</th><th>Origen</th><th>Estado</th><th /></tr></thead>
           <tbody>
             {filtered.slice(cur * PAGE, cur * PAGE + PAGE).map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className={r.live ? 'row-live' : undefined}>
                 <td className="cell-date">{fmtDateTime(r.at)}</td>
                 <td><div className="ev-type">{r.kind}</div><div className="cell-sub">{r.ref}</div></td>
                 <td><div className="cell-main">{r.unitLabel}</div><div className="cell-sub">{r.product}</div></td>
-                <td><Chip tone="sim">Simulado</Chip></td>
+                <td><Chip tone={r.live ? 'info' : 'sim'}>{r.origin}</Chip></td>
                 <td><Chip tone={r.status.tone}>{r.status.label}</Chip></td>
                 <td className="row-actions"><button type="button" className="btn btn-small" onClick={() => onEvidence(r)}>Evidencia</button></td>
               </tr>

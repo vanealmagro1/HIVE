@@ -1,10 +1,11 @@
 // Dashboard: indicadores, movimientos, mapa de bodega, actividad reciente y lo que requiere atención.
-import { Archive, CircleDollarSign, Clock, MapPin, PackageSearch, TrendingUp, TriangleAlert, Warehouse } from 'lucide-react';
+import { Archive, CircleDollarSign, Clock, MapPin, PackageSearch, Radio, TrendingUp, TriangleAlert, Warehouse } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { formatNumber, formatUsd } from '../../domain/format';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
-import { attentionItems, eventHistory, fmtDateTime, movementsByDay, occupancy, type AttentionItem } from '../../store/operations';
-import { kpis } from '../../store/selectors';
+import { attentionItems, beaconCount, eventHistory, fmtDateTime, movementsByDay, occupancy, verification, type AttentionItem } from '../../store/operations';
+import { BEACON_BOXES } from '../../seed/seed';
+import { kpis, unitContents } from '../../store/selectors';
 import type { Actions } from '../actions';
 import MovementsChart from '../charts/MovementsChart';
 import { Chip, Kpi, PageHead } from '../layout/Shell';
@@ -40,6 +41,52 @@ export function AttentionList({ items, actions }: { items: AttentionItem[]; acti
   );
 }
 
+const LIVE_TEXT = { off: 'Lector en vivo apagado', connecting: 'Conectando lector…', connected: 'Lector en vivo · conectado', offline: 'Lector sin conexión' } as const;
+const LIVE_TONE = { off: 'sim', connecting: 'warn', connected: 'ok', offline: 'bad' } as const;
+
+/** Conteo automático: las cajas con beacon pasan a "Verificada" en cuanto el lector las lee. */
+function LiveCount({ state, actions }: { state: DemoState; actions: Actions }) {
+  const c = beaconCount(state);
+  return (
+    <section className="card live-card" data-testid="live-count">
+      <div className="card-head">
+        <div>
+          <h2 className="card-title">Conteo automático · cajas con etiqueta</h2>
+          <p className="card-sub">Sin reconteo manual: el lector verifica cada caja en segundos.</p>
+        </div>
+        <Chip tone={LIVE_TONE[state.ui.live]}><Radio size={12} /> {LIVE_TEXT[state.ui.live]}</Chip>
+      </div>
+      <div className="live-body">
+        <div className="live-total">
+          <div className="live-big" data-testid="live-verified">{c.verified} <span>de {c.total}</span></div>
+          <div className="kpi-caption">cajas verificadas hoy{c.misplaced ? ` · ${c.misplaced} fuera de lugar` : ''}</div>
+          <div className="bar"><span style={{ width: `${(c.verified / c.total) * 100}%` }} /></div>
+          <div className="kpi-caption">{c.lastAt ? `Última lectura: beacon ${c.lastLabel} · ${fmtDateTime(c.lastAt)}` : 'Esperando la primera lectura…'}</div>
+        </div>
+        <div className="live-boxes">
+          {BEACON_BOXES.map((b) => {
+            const u = state.units.find((x) => x.id === b.unitId);
+            if (!u) return null;
+            const v = verification(u);
+            const read = state.events.some((e) => e.source === 'BLE' && e.unitId === u.id);
+            const tone = !read ? 'sim' : v.tone;
+            return (
+              <button key={b.unitId} type="button" className={`live-box tone-${tone}`} onClick={() => actions.locateUnit(u.id)} data-testid={`live-box-${b.label}`}>
+                <span className="live-tag">{b.label}</span>
+                <span className="live-info">
+                  <strong>{unitContents(state, u).title}</strong>
+                  <span>{u.id} · {u.expectedLocationId}</span>
+                </span>
+                <Chip tone={tone}>{!read ? 'Sin lectura' : v.tone === 'ok' ? 'Verificada' : 'Fuera de lugar'}</Chip>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage({ state, actions }: { state: DemoState; actions: Actions }) {
   const [days, setDays] = useState(7);
   const k = kpis(state, computeAnalytics(state));
@@ -58,6 +105,8 @@ export default function DashboardPage({ state, actions }: { state: DemoState; ac
           Simular recepción
         </button>
       </PageHead>
+
+      <LiveCount state={state} actions={actions} />
 
       <section className="kpis" aria-label="Indicadores">
         <Kpi label="Unidades registradas" value={formatNumber(k.units)} caption="Stock actual" icon={Archive} testId="kpi-units" />
@@ -99,11 +148,11 @@ export default function DashboardPage({ state, actions }: { state: DemoState; ac
             <thead><tr><th>Evento</th><th>Producto</th><th>Fecha</th><th>Origen</th></tr></thead>
             <tbody>
               {history.slice(0, 5).map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.live ? 'row-live' : undefined} onClick={r.unitId ? () => actions.locateUnit(r.unitId!) : undefined} style={r.unitId ? { cursor: 'pointer' } : undefined}>
                   <td><div className="ev-type">{r.kind}</div><div className="cell-sub">{r.unitLabel}</div></td>
-                  <td>{r.product}</td>
+                  <td>{r.product}{r.live && <div className="cell-sub">{r.status.label}</div>}</td>
                   <td className="cell-date">{fmtDateTime(r.at)}</td>
-                  <td><Chip tone="sim">Simulado</Chip></td>
+                  <td><Chip tone={r.live ? 'info' : 'sim'}>{r.origin}</Chip></td>
                 </tr>
               ))}
             </tbody>

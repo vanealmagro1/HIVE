@@ -109,6 +109,22 @@ describe('HIVE UI v2 · operaciones', () => {
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.599');
   }, 30_000);
 
+  it('Dashboard en vivo: una lectura de beacon (plan B Alt+1) verifica la caja y aparece en la actividad', async () => {
+    const store = createDemoStore();
+    const user = userEvent.setup();
+    render(<App store={store} />);
+    expect(screen.getByTestId('live-verified').textContent).toMatch(/^0 de 3/);
+    expect(within(screen.getByTestId('live-box-4')).getByText('Sin lectura')).toBeTruthy();
+    await user.keyboard('{Alt>}1{/Alt}');
+    expect(screen.getByTestId('live-verified').textContent).toMatch(/^1 de 3/);
+    expect(within(screen.getByTestId('live-box-4')).getByText('Verificada')).toBeTruthy();
+    expect(screen.getAllByText('Beacon · celular').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('last-message').textContent).toMatch(/Cuaderno universitario 100 h cuadros grandes \(CJ-0003\) verificada en B-05-03/);
+    await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');
+    expect(within(screen.getByTestId('live-box-7')).getByText('Fuera de lugar')).toBeTruthy();
+    expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
+  });
+
   it('la navegación lateral abre cada sección', async () => {
     const user = userEvent.setup();
     render(<App store={createDemoStore()} />);

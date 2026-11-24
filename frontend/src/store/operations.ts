@@ -6,6 +6,9 @@ import { receiptShortage } from '../engine/receiving';
 import { siteName } from '../engine/transfers';
 import type { DemoState } from './demoState';
 import { alertStory, unitContents } from './selectors';
+import { BEACON_BOXES } from '../seed/seed';
+
+const beaconLabel = (unitId: string) => BEACON_BOXES.find((b) => b.unitId === unitId)?.label ?? null;
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'sim';
 export interface Badge { label: string; tone: Tone }
@@ -62,6 +65,10 @@ export interface HistoryRow {
   /** Eventos de origen (para el detalle de evidencia). */
   eventIds: string[];
   note: string;
+  /** Procedencia visible: "Simulado" o el lector real (beacon BLE). */
+  origin: string;
+  /** true si es una lectura en vivo de beacon. */
+  live?: boolean;
 }
 
 /**
@@ -69,7 +76,7 @@ export interface HistoryRow {
  * despachos registrados de la última semana. Ordenado del más reciente al más antiguo.
  */
 export function eventHistory(state: DemoState, days = 7): HistoryRow[] {
-  const rows: HistoryRow[] = [];
+  const rows: (Omit<HistoryRow, 'origin'> & { origin?: string })[] = [];
   const name = (skuId: string) => state.skus.find((k) => k.id === skuId)?.name || skuId;
 
   // Recepciones (una fila por orden de compra con lecturas).
@@ -91,6 +98,19 @@ export function eventHistory(state: DemoState, days = 7): HistoryRow[] {
   const sweeps = new Map<string, typeof state.events>();
   for (const e of state.events) {
     if (e.type === 'RECEIPT_READ') continue;
+    if (e.source === 'BLE') {
+      const unit = state.units.find((u) => u.id === e.unitId);
+      const ok = !!unit && e.locationHintId === unit.expectedLocationId;
+      rows.push({
+        id: e.id, at: e.capturedAt, kind: 'Detección', ref: `Beacon ${beaconLabel(e.unitId) ?? ''}`.trim(),
+        unitLabel: e.unitId, product: unit ? unitContents(state, unit).title : e.unitId,
+        status: ok ? { label: 'Verificada', tone: 'ok' } : { label: 'Fuera de lugar', tone: 'bad' },
+        unitId: e.unitId, eventIds: [e.id], live: true,
+        origin: e.readerId === 'laptop' ? 'Beacon · laptop' : 'Beacon · celular',
+        note: ok ? `Leída en su ubicación ${e.locationHintId}.` : `Leída en ${e.locationHintId}; su ubicación es ${unit?.expectedLocationId ?? '—'}.`,
+      });
+      continue;
+    }
     if (flagged.has(e.id)) {
       const unit = state.units.find((u) => u.id === e.unitId);
       const root = unit?.parentId ? state.units.find((u) => u.id === unit.parentId) : unit;
@@ -150,7 +170,7 @@ export function eventHistory(state: DemoState, days = 7): HistoryRow[] {
       status: { label: 'Confirmado', tone: 'ok' }, unitId: null, eventIds: [], note: 'Salidas registradas en el día (demanda).',
     });
   }
-  return rows.sort((a, b) => b.at.localeCompare(a.at));
+  return rows.map((r) => ({ ...r, origin: r.origin ?? 'Simulado' })).sort((a, b) => b.at.localeCompare(a.at));
 }
 
 export interface DayMovement { date: string; entradas: number; salidas: number; traslados: number }
@@ -196,4 +216,21 @@ export function attentionItems(state: DemoState): AttentionItem[] {
     else if (r.type === 'PRIORITIZE_FEFO') items.push({ id: r.id, kind: 'expiry', title: 'Riesgo de vencimiento', desc: `${sku} · ${r.title}`, unitId: null, skuId: r.skuId });
   }
   return items;
+}
+
+export interface BeaconCount { verified: number; total: number; misplaced: number; lastAt: string | null; lastLabel: string | null }
+
+/** Conteo automático de las cajas con beacon: cuántas verificó HIVE en su ubicación y cuál fue la última lectura. */
+export function beaconCount(state: DemoState): BeaconCount {
+  const ble = state.events.filter((e) => e.source === 'BLE');
+  let verified = 0;
+  let misplaced = 0;
+  for (const b of BEACON_BOXES) {
+    const u = state.units.find((x) => x.id === b.unitId);
+    if (!u || !ble.some((e) => e.unitId === u.id)) continue;
+    if (u.verificationStatus === 'OBSERVED') verified += 1;
+    else if (u.verificationStatus === 'PENDING_VERIFICATION') misplaced += 1;
+  }
+  const last = ble.at(-1) ?? null;
+  return { verified, total: BEACON_BOXES.length, misplaced, lastAt: last?.capturedAt ?? null, lastLabel: last ? beaconLabel(last.unitId) : null };
 }

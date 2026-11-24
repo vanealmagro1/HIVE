@@ -20,6 +20,8 @@ export type DemoAction =
   | { type: 'SET_PLAYBACK'; scenarioId: string | null }
   | { type: 'SET_SECTION'; section: Section }
   | { type: 'SET_SKU'; skuId: string | null }
+  | { type: 'SET_LIVE_STATUS'; status: DemoState['ui']['live'] }
+  | { type: 'SET_MESSAGE'; kind: 'info' | 'warning' | 'error'; text: string }
   | { type: 'FOCUS_UNIT'; unitId: string }
   | { type: 'START_MOVEMENT'; movementId: string; at: string }
   | { type: 'CONFIRM_MOVEMENT'; movementId: string; receivedQuantity: number; at: string };
@@ -74,7 +76,7 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
   switch (action.type) {
     case 'RESET': {
       const fresh = createInitialState();
-      return { ...fresh, ui: { ...fresh.ui, force2D: state.ui.force2D }, lastMessage: { kind: 'info', text: 'Demo reiniciada al estado semilla.' } };
+      return { ...fresh, ui: { ...fresh.ui, force2D: state.ui.force2D, live: state.ui.live }, lastMessage: { kind: 'info', text: 'Demo reiniciada al estado semilla.' } };
     }
     case 'SELECT_UNIT':
     {
@@ -99,6 +101,10 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       return closeReceipt(state, action.purchaseOrderId, action.closedAt);
     case 'SET_SECTION':
       return { ...state, ui: { ...state.ui, section: action.section } };
+    case 'SET_LIVE_STATUS':
+      return state.ui.live === action.status ? state : { ...state, ui: { ...state.ui, live: action.status } };
+    case 'SET_MESSAGE':
+      return { ...state, lastMessage: { kind: action.kind, text: action.text } };
     case 'SET_SKU':
       if (action.skuId !== null && !state.skus.some((k) => k.id === action.skuId)) return state;
       return { ...state, ui: { ...state.ui, skuId: action.skuId } };

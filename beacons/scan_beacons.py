@@ -1,11 +1,14 @@
-"""Escáner de beacons Estimote para HIVE (fase 1: ver qué detecta la laptop).
+"""Escáner de beacons Estimote para HIVE.
 
 Usa el Bluetooth de Windows a través de la librería bleak. No hace falta emparejar los beacons.
 
     python scan_beacons.py              tabla en vivo con los beacons Estimote
     python scan_beacons.py --todos      cualquier dispositivo BLE (diagnóstico)
     python scan_beacons.py --aprender   identificar cada beacon físico y guardar su etiqueta (7, 4, 06…)
-    python scan_beacons.py --json       una línea JSON por detección (forma que usará el puente a HIVE)
+    python scan_beacons.py --json       una línea JSON por detección
+    python scan_beacons.py --enviar --ubicacion B-05-03
+                                        la laptop hace de lector: cuando un beacon queda PEGADO a ella,
+                                        envía la lectura a HIVE (npm run dev:red debe estar corriendo)
 
 Ctrl + C para salir.
 """
@@ -18,6 +21,7 @@ import os
 import statistics
 import sys
 import time
+import urllib.request
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +35,10 @@ from parsers import Packet, address_family, estimate_distance, fmt_distance, par
 
 CATALOG = Path(__file__).with_name("beacons.json")
 OUT_OF_RANGE_S = 10
+NEAR_RSSI = -42      # "pegado" al lector
+MARGIN_DB = 10       # debe ganar claramente al segundo beacon
+DEBOUNCE_S = 8       # misma caja: una lectura cada 8 s
+DEFAULT_RELAY = "http://127.0.0.1:5174/api/lecturas"
 SMOOTHING = 9  # mediana de las últimas lecturas: ignora los picos típicos de BLE
 
 
@@ -153,14 +161,60 @@ class Scanner:
         return "\n".join(lines)
 
 
-async def run_live(show_all: bool, as_json: bool) -> None:
+def post_read(url: str, label: str, ubicacion: str, rssi: float) -> str:
+    body = json.dumps({"beacon": label, "ubicacion": ubicacion, "rssi": round(rssi), "lector": "laptop",
+                       "t": int(time.time() * 1000)}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=3) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    return f"enviado (pantallas de HIVE escuchando: {data.get('pantallas', '?')})"
+
+
+class Sender:
+    """Decide cuándo un beacon está "pegado" a la laptop y envía la lectura a HIVE (mismo criterio que el celular)."""
+
+    def __init__(self, url: str, ubicacion: str):
+        self.url, self.ubicacion = url, ubicacion
+        self.leader: str | None = None
+        self.last_sent: dict[str, float] = {}
+        self.status = f"Lector de la laptop en {ubicacion}: pega una caja a la laptop."
+
+    async def tick(self, sc: "Scanner", catalog: list[dict]) -> None:
+        now = time.time()
+        ranked = sorted(
+            ((label_for(s, catalog), s.rssi_avg) for s in sc.devices.values() if s.estimote and now - s.last < 3),
+            key=lambda x: -x[1],
+        )
+        ranked = [r for r in ranked if r[0] != "—"]
+        top = ranked[0] if ranked else None
+        clear = top is not None and top[1] >= NEAR_RSSI and (len(ranked) < 2 or top[1] - ranked[1][1] >= MARGIN_DB)
+        if not clear:
+            self.leader = None
+            return
+        if self.leader != top[0]:  # debe sostenerse al menos 1 segundo (dos evaluaciones seguidas)
+            self.leader = top[0]
+            return
+        if now - self.last_sent.get(top[0], 0) < DEBOUNCE_S:
+            return
+        self.last_sent[top[0]] = now
+        try:
+            result = await asyncio.to_thread(post_read, self.url, top[0], self.ubicacion, top[1])
+            self.status = f"Beacon {top[0]} → {self.ubicacion}: {result}"
+        except Exception as e:  # noqa: BLE001 — se informa en pantalla y se sigue escaneando
+            self.status = f"No se pudo enviar el beacon {top[0]}: {e}. ¿Está corriendo npm run dev:red?"
+
+
+async def run_live(show_all: bool, as_json: bool, sender: Sender | None = None) -> None:
     sc = Scanner(show_all, as_json)
     catalog = load_catalog()
     async with BleakScanner(detection_callback=sc.on_advertisement):
         while True:
             await asyncio.sleep(1)
+            if sender:
+                await sender.tick(sc, catalog)
             if not as_json:
-                sys.stdout.write("\x1b[2J\x1b[H" + sc.render(catalog) + "\n")
+                extra = f"\n\n{sender.status}" if sender else ""
+                sys.stdout.write("\x1b[2J\x1b[H" + sc.render(catalog) + extra + "\n")
                 sys.stdout.flush()
 
 
@@ -200,6 +254,9 @@ def main() -> None:
     ap.add_argument("--todos", action="store_true", help="mostrar cualquier dispositivo BLE")
     ap.add_argument("--aprender", action="store_true", help="identificar beacons y guardar su etiqueta")
     ap.add_argument("--json", action="store_true", help="una línea JSON por detección")
+    ap.add_argument("--enviar", nargs="?", const=DEFAULT_RELAY, metavar="URL",
+                    help=f"enviar a HIVE las cajas pegadas a la laptop (por defecto {DEFAULT_RELAY})")
+    ap.add_argument("--ubicacion", default="B-05-03", help="ubicación donde está la laptop-lector (p. ej. B-05-03)")
     args = ap.parse_args()
     if os.name == "nt":
         os.system("")  # habilita colores/ANSI en la consola de Windows
@@ -209,7 +266,8 @@ def main() -> None:
         if args.aprender:
             run_learn()
         else:
-            asyncio.run(run_live(args.todos, args.json))
+            sender = Sender(args.enviar, args.ubicacion.upper()) if args.enviar else None
+            asyncio.run(run_live(args.todos, args.json, sender))
     except KeyboardInterrupt:
         print("\nEscáner detenido.")
 

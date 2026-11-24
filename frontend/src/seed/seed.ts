@@ -101,6 +101,24 @@ function weeklySeries(skuId: string, unitsPerDay: number): DailyDemand[] {
   return days.map((qty, i) => ({ skuId, date: addDays(REFERENCE_DATE, -(DEMAND_WINDOW_DAYS - i)), dispatchedBaseUnits: qty }));
 }
 
+/**
+ * Cajas sueltas con un beacon Estimote como etiqueta (demo en vivo, línea papelería · Zona A).
+ * Arrancan SIN lectura reciente (último conteo fue manual): la lectura del beacon las verifica.
+ * La etiqueta coincide con el número escrito en cada beacon y con beacons/beacons.json.
+ */
+export const BEACON_BOXES: { label: string; unitId: string }[] = [
+  { label: '4', unitId: 'CJ-0003' },  // Cuaderno universitario 100 h cuadros grandes · B-05-03
+  { label: '7', unitId: 'CJ-0022' },  // Esferográfico punta fina negro · B-01-03
+  { label: '06', unitId: 'CJ-0086' }, // Lápices de colores 12 colores · A-08-03
+];
+const BEACON_UNIT_IDS = new Set(BEACON_BOXES.map((b) => b.unitId));
+
+function withBeaconBoxesUnread(units: LogisticUnit[]): LogisticUnit[] {
+  return units.map((u) => (BEACON_UNIT_IDS.has(u.id)
+    ? { ...u, verificationStatus: 'EXPECTED', observedLocationId: null, lastObservedAt: null }
+    : u));
+}
+
 /** Segunda bodega de la empresa (destino de la redistribución). Cifras SINTÉTICAS. */
 export const SOUTH_WAREHOUSE_ID = 'WH-QUITO-SUR';
 function remoteSites(): RemoteSite[] {
@@ -125,7 +143,7 @@ function buildSeed(): SeedData {
     locations,
     skus: [...HERO_SKUS, ...gen.skus],
     lots: [...HERO_LOTS, ...gen.lots],
-    units: [...heroUnits(), ...gen.units],
+    units: withBeaconBoxesUnread([...heroUnits(), ...gen.units]),
     dailyDemand: [
       ...weeklySeries(HERO.MOCHILA, 10), // 300 en 30 días (patrón semanal)
       ...dailySeries(HERO.TINTA, 4), // 120 en 30 días

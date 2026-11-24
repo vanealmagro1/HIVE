@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>HIVE · Etiquetas de las cajas (beacons)</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; color: #1b1530; background: #f6f5fa; }
+    .hint { max-width: 190mm; margin: 12px auto; font-size: 13px; color: #6b6880; }
+    .sheet { display: grid; grid-template-columns: repeat(2, 90mm); gap: 8mm; justify-content: center; padding: 6mm 0; }
+    .label { width: 90mm; height: 60mm; background: #fff; border: 1.5px solid #1b1530; border-radius: 4mm; padding: 5mm; display: grid; grid-template-rows: auto 1fr auto; gap: 3mm; break-inside: avoid; }
+    .top { display: flex; align-items: center; gap: 3mm; }
+    .mark { width: 9mm; height: 9mm; border-radius: 2.5mm; background: #6a3fd6; color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+    .brand { font-weight: 800; letter-spacing: .08em; font-size: 14px; }
+    .brand small { display: block; font-weight: 500; letter-spacing: 0; font-size: 9px; color: #6b6880; }
+    .num { margin-left: auto; width: 14mm; height: 14mm; border-radius: 50%; background: #241634; color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+    .prod { font-size: 17px; font-weight: 800; line-height: 1.15; align-self: center; }
+    .meta { display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; }
+    .meta b { display: block; font-size: 15px; }
+    .rfid { font-size: 9px; color: #6b6880; text-align: right; }
+    @media print { body { background: #fff; } .hint { display: none; } }
+  </style>
+</head>
+<body>
+  <p class="hint">Imprime en A4 (Ctrl + P), recorta y pega cada etiqueta en la caja que lleva ese beacon. El número grande es el mismo escrito en el beacon.</p>
+  <div class="sheet" id="sheet"></div>
+  <script>
+    const BOXES = [
+      { n: '4', id: 'CJ-0003', sku: 'CUA-008', prod: 'Cuaderno universitario 100 h cuadros grandes', loc: 'B-05-03', qty: '20 u' },
+      { n: '7', id: 'CJ-0022', sku: 'ESC-003', prod: 'Esferográfico punta fina negro', loc: 'B-01-03', qty: '62 u' },
+      { n: '06', id: 'CJ-0086', sku: 'ART-002', prod: 'Lápices de colores 12 colores', loc: 'A-08-03', qty: '18 u' },
+    ];
+    document.getElementById('sheet').innerHTML = BOXES.map((b) => `
+      <div class="label">
+        <div class="top"><div class="mark">H</div><div class="brand">HIVE<small>Inteligencia de bodega</small></div><div class="num">${b.n}</div></div>
+        <div class="prod">${b.prod}</div>
+        <div class="meta"><div>Caja<b>${b.id}</b>${b.sku} · ${b.qty}</div><div>Ubicación<b>${b.loc}</b></div><div class="rfid">Etiqueta<br>inteligente<br>(beacon BLE)</div></div>
+      </div>`).join('');
+  </script>
+</body>
+</html>
