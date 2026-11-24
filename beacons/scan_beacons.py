@@ -31,7 +31,7 @@ from parsers import Packet, address_family, estimate_distance, fmt_distance, par
 
 CATALOG = Path(__file__).with_name("beacons.json")
 OUT_OF_RANGE_S = 10
-SMOOTHING = 5
+SMOOTHING = 9  # mediana de las últimas lecturas: ignora los picos típicos de BLE
 
 
 @dataclass
@@ -50,7 +50,7 @@ class Seen:
 
     @property
     def rssi_avg(self) -> float:
-        return statistics.fmean(self.rssi) if self.rssi else -100.0
+        return statistics.median(self.rssi) if self.rssi else -100.0
 
     @property
     def distance(self) -> float:
@@ -84,6 +84,7 @@ class Scanner:
         self.show_all = show_all
         self.as_json = as_json
         self.devices: dict[str, Seen] = {}
+        self.alias: dict[str, str] = {}  # familia de dirección -> beacon al que pertenece
 
     def on_advertisement(self, device, adv) -> None:
         packets: list[Packet] = parse_advertisement(adv.manufacturer_data or {}, adv.service_data or {})
@@ -91,7 +92,14 @@ class Scanner:
         is_estimote = any(p.estimote for p in packets) or (name or "").lower().startswith("estimote")
         if not (is_estimote or self.show_all):
             return
-        key = address_family(device.address)
+        key = self.alias.get(address_family(device.address), address_family(device.address))
+        # Si el paquete trae un id que ya conocemos (p. ej. el mismo iBeacon) desde otra dirección, es el mismo beacon.
+        ids = {p.ident for p in packets if p.ident}
+        for other in self.devices.values():
+            if other.key != key and ids & set(other.idents.values()):
+                self.alias[address_family(device.address)] = other.key
+                key = other.key
+                break
         s = self.devices.setdefault(key, Seen(key=key))
         s.addresses.add(device.address)
         s.name = name or s.name
