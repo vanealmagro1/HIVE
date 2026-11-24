@@ -26,8 +26,8 @@ interface Props {
   onSelect: (unitId: string) => void;
   onClear: () => void;
   onToggle2D: (value: boolean) => void;
-  /** Paso del recorrido que se encuadra automáticamente (null = vista libre). */
-  focusStep: number | null;
+  /** Integrado en la página del gemelo: sin buscador ni tarjeta flotante (la ficha está en la columna lateral). */
+  embedded?: boolean;
 }
 
 export type RackMode = 'solid' | 'transparent' | 'hidden';
@@ -49,7 +49,7 @@ const OP_STATUS: Record<string, string> = {
   OBSERVED: 'Disponible', EXPECTED: 'Sin lectura reciente', PENDING_VERIFICATION: 'Por verificar', CONFIRMED: 'Verificado',
 };
 
-export default function TwinView({ state, onSelect, onClear, onToggle2D, focusStep }: Props) {
+export default function TwinView({ state, onSelect, onClear, onToggle2D, embedded = false }: Props) {
   const webgl = useMemo(() => hasWebGL(), []);
   const [cmd, setCmd] = useState<CamCommand | null>(null);
   const [zoom, setZoom] = useState({ n: 0, dir: 1 });
@@ -70,10 +70,7 @@ export default function TwinView({ state, onSelect, onClear, onToggle2D, focusSt
     computeAnalytics(state).flatMap((a) => a.expiryRisks.filter((r) => r.remainingAtExpiry > 0).map((r) => r.lotId)),
   ), [state.units, state.lots, state.skus, state.dailyDemand]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Encuadre automático por paso del recorrido (Resumen).
-  useEffect(() => { if (focusStep !== null) { setIsolatedRack(null); order({ kind: 'step', step: focusStep }); } }, [focusStep]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Enfoque pedido desde fuera del gemelo (Analítica → "Ver en el gemelo").
+  // Enfoque pedido desde fuera del gemelo (lista de inventario, tablas, alertas → "Ver en gemelo").
   useEffect(() => {
     if (state.ui.focusSeq > 0 && state.ui.selectedUnitId) { setIsolatedRack(null); order({ kind: 'unit', unitId: state.ui.selectedUnitId }); }
   }, [state.ui.focusSeq]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -96,7 +93,7 @@ export default function TwinView({ state, onSelect, onClear, onToggle2D, focusSt
   // Escape cierra la selección (si no hay un drawer abierto, que tiene su propio Escape).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || state.ui.drawer) return;
+      if (e.key !== 'Escape' || document.querySelector('.drawer')) return;
       if (state.ui.selectedUnitId || isolatedRack || listOpen) clearAll();
     };
     window.addEventListener('keydown', onKey);
@@ -187,7 +184,7 @@ export default function TwinView({ state, onSelect, onClear, onToggle2D, focusSt
       )}
 
       {/* Búsqueda: producto, SKU, pallet, caja o ubicación */}
-      <div className="twin-search">
+      {!embedded && <div className="twin-search">
         <div className="search-box">
           <Search size={16} aria-hidden />
           <input
@@ -220,10 +217,19 @@ export default function TwinView({ state, onSelect, onClear, onToggle2D, focusSt
             <button type="button" className="round-btn" onClick={() => goHit(hitIndex + 1)} aria-label="Coincidencia siguiente"><ChevronRight size={16} /></button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Tarjeta de selección (producto → SKU · cantidad → pallet → ubicación → estado) */}
-      {root && contents && (
+      {embedded && root && !use2D && (
+        <div className="sel-bar" data-testid="selection-bar">
+          {isolatedRack
+            ? <button type="button" className="btn btn-small" onClick={general}><Eye size={14} /> Ver toda la bodega</button>
+            : <button type="button" className="btn btn-small" onClick={isolate}>Aislar rack</button>}
+          <button type="button" className="btn btn-small" onClick={() => order({ kind: 'unit', unitId: root.id })}>Enfocar</button>
+          <button type="button" className="btn btn-small" onClick={clearAll} aria-label="Cerrar selección"><X size={14} /></button>
+        </div>
+      )}
+      {!embedded && root && contents && (
         <div className="sel-card" data-testid="selection-card">
           <div className="sel-head">
             <span className="product-icon"><Icon size={18} /></span>

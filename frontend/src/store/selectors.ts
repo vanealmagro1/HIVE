@@ -187,30 +187,6 @@ export const RECEIPT_SCENARIO_ID = 'DEMO_RECEIPT_001';
 export const COUNT_SCENARIO_ID = 'DEMO_COUNT_P4';
 export const CLAIM_RECOMMENDATION_ID = 'rec-claim-oc-2026-1187';
 
-export type DemoStepId = 'visualize' | 'detect' | 'alert' | 'analyze' | 'recommend' | 'register';
-
-export interface DemoStep { id: DemoStepId; title: string; subtitle: string; done: boolean }
-
-/**
- * Recorrido guiado de 6 pasos. La navegación es explícita (ui.step); "done" se deriva del estado:
- * los pasos con acción se completan al ejecutarla; los informativos, al pasar por ellos.
- * Avanzar NUNCA aprueba ni ejecuta nada por sí solo.
- */
-export function demoSteps(state: DemoState): DemoStep[] {
-  const received = state.purchaseOrders.every((p) => p.status === 'CLOSED');
-  const detected = state.events.some((e) => e.id === DEMO_EVENT_ID) && state.ui.playback !== COUNT_SCENARIO_ID;
-  const approved = state.recommendations.find((r) => r.id === DEMO_RECOMMENDATION_ID)?.status === 'APPROVED';
-  const at = state.ui.step;
-  return [
-    { id: 'visualize', title: 'Visualizar', subtitle: 'Tu bodega, en tiempo real', done: received },
-    { id: 'detect', title: 'Detectar', subtitle: 'Movimiento detectado', done: detected },
-    { id: 'alert', title: 'Alertar', subtitle: 'Ubicación por verificar', done: detected && at > 2 },
-    { id: 'analyze', title: 'Analizar', subtitle: 'Impacto identificado', done: at > 3 || approved },
-    { id: 'recommend', title: 'Recomendar', subtitle: 'Acción recomendada', done: approved },
-    { id: 'register', title: 'Registrar', subtitle: 'Acción registrada', done: approved && at === 5 },
-  ];
-}
-
 /** KPIs del encabezado, todos derivados del estado. */
 export function kpis(state: DemoState, analytics: { skuId: string; skuName: string; coverageDays: number | null; excessExposureUsd: number | null }[]) {
   const units = state.units.filter((u) => !state.units.some((x) => x.parentId === u.id))

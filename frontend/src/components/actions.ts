@@ -114,16 +114,11 @@ export function createActions(store: DemoStore, options: ActionOptions = {}) {
       store.dispatch({ type: 'CONFIRM_MOVEMENT', movementId, receivedQuantity: receivedQuantity ?? m.quantity, at: RECEPTION_CONFIRM_TIME });
     },
     setSection: (section: Section) => store.dispatch({ type: 'SET_SECTION', section }),
-    goStep: (step: number) => {
-      store.dispatch({ type: 'SET_SECTION', section: 'resumen' });
-      // Paso 6: la tarjeta de selección taparía el recorrido hacia el muelle D2.
-      if (step === 5) store.dispatch({ type: 'SELECT_UNIT', unitId: null });
-      store.dispatch({ type: 'SET_STEP', step });
+    /** Abre el gemelo enfocando una unidad (cámara + resaltado). */
+    locateUnit: (unitId: string) => {
+      store.dispatch({ type: 'SET_SECTION', section: 'gemelo' });
+      store.dispatch({ type: 'FOCUS_UNIT', unitId });
     },
-    nextStep: () => actions.goStep(store.getState().ui.step + 1),
-    prevStep: () => actions.goStep(store.getState().ui.step - 1),
-    openDrawer: () => store.dispatch({ type: 'SET_DRAWER', open: true }),
-    closeDrawer: () => store.dispatch({ type: 'SET_DRAWER', open: false }),
     setAlertInReview: (alertId: string) => store.dispatch({ type: 'SET_ALERT_STATUS', alertId, status: 'IN_REVIEW' }),
     reset: () => { source?.stop(); source = null; api.resetDemo(); },
   };

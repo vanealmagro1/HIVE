@@ -1,19 +1,15 @@
-// HIVE UI v1.1 (referencia: docs/design/hive-ui-reference.png)
-//   Sidebar (navegación real) · Header (bodega, "Demo simulada", alertas, perfil)
-//   Resumen: KPIs + gemelo 3D protagonista + panel contextual del paso actual + barra de 6 pasos
-//   Inventario · Gemelo digital · Eventos · Analítica · Reportes (pendiente)
-// El gemelo se monta UNA sola vez y se comparte entre Resumen y Gemelo digital (no se recrea al navegar).
-import { useEffect, useMemo, useState } from 'react';
+// HIVE UI v2 · Operaciones: Dashboard · Gemelo digital · Inventario · Eventos · Analítica · Acciones.
+// El gemelo 3D se monta UNA sola vez (no se recrea al navegar); el resto de páginas lee el mismo estado.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createActions, type ActionOptions } from './components/actions';
-import { Header, KpiCards, PendingView, Sidebar } from './components/layout/Shell';
-import { DetailDrawer, StepBar, StepPanel } from './components/layout/Steps';
-import AlertsPanel from './components/panels/AlertsPanel';
-import AnalyticsPanel from './components/panels/AnalyticsPanel';
-import InventoryPanel from './components/panels/InventoryPanel';
-import MeasurePanel from './components/panels/MeasurePanel';
-import RfidPanel from './components/panels/RfidPanel';
-import SkuExplorer from './components/panels/SkuExplorer';
-import UnitPanel from './components/panels/UnitPanel';
+import { Header, NAV, Sidebar } from './components/layout/Shell';
+import ActionsPage from './components/pages/ActionsPage';
+import AnalyticsPage from './components/pages/AnalyticsPage';
+import DashboardPage from './components/pages/DashboardPage';
+import EventsPage from './components/pages/EventsPage';
+import EvidenceDrawer, { type EvidenceTarget } from './components/pages/EvidenceDrawer';
+import InventoryPage from './components/pages/InventoryPage';
+import TwinPage from './components/pages/TwinPage';
 import TwinView from './components/twin/TwinView';
 import { demoStore, useDemoState, type DemoStore } from './store/demoStore';
 
@@ -32,68 +28,35 @@ function Toast({ text }: { text: string | null }) {
 export default function App({ store = demoStore, playback }: { store?: DemoStore; playback?: ActionOptions }) {
   const state = useDemoState(store);
   const actions = useMemo(() => createActions(store, playback), [store, playback]);
+  const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
+  const closeEvidence = useCallback(() => setEvidence(null), []);
+  const openUnitEvidence = useCallback((unitId: string) => setEvidence({ unitId }), []);
   const section = state.ui.section;
-  const twinVisible = section === 'resumen' || section === 'gemelo';
   // Cada sección empieza desde arriba (no hereda el scroll de la anterior).
   useEffect(() => { document.querySelector('.content')?.scrollTo?.({ top: 0 }); }, [section]);
+  useEffect(() => { document.title = `HIVE · ${NAV.find((n) => n.section === section)?.label ?? ''}`; }, [section]);
+
+  const twin = (
+    <TwinView state={state} onSelect={actions.selectFromMap} onClear={actions.clearSelection} onToggle2D={actions.setForce2D} embedded />
+  );
 
   return (
     <div className="app">
       <Sidebar state={state} actions={actions} />
       <div className="main">
-        <Header state={state} actions={actions} />
+        <Header state={state} />
         <main className="content">
-          <div className="resumen" style={{ display: twinVisible ? undefined : 'none', height: section === 'gemelo' ? 'calc(100% - 4px)' : undefined }}>
-            {section === 'resumen' ? <KpiCards state={state} /> : <h1 className="section-title">Gemelo digital</h1>}
-            <div className="overview">
-              <TwinView
-                state={state}
-                onSelect={actions.selectFromMap}
-                onClear={actions.clearSelection}
-                onToggle2D={actions.setForce2D}
-                focusStep={section === 'resumen' ? state.ui.step : null}
-              />
-              {section === 'resumen'
-                ? <StepPanel state={state} actions={actions} />
-                : <section className="card" style={{ overflow: 'auto' }}><UnitPanel state={state} actions={actions} /></section>}
-            </div>
-            {section === 'resumen' && <StepBar state={state} actions={actions} />}
+          <div style={{ display: section === 'gemelo' ? undefined : 'none' }}>
+            <TwinPage state={state} actions={actions} twin={twin} onEvidence={openUnitEvidence} />
           </div>
-
-          {section === 'inventario' && (
-            <>
-              <h1 className="section-title">Inventario</h1>
-              <div className="card"><InventoryPanel state={state} actions={actions} /></div>
-            </>
-          )}
-          {section === 'eventos' && (
-            <>
-              <h1 className="section-title">Eventos</h1>
-              <div className="section-grid">
-                <div className="card"><RfidPanel state={state} actions={actions} /></div>
-                <div className="card"><AlertsPanel state={state} actions={actions} /></div>
-              </div>
-            </>
-          )}
-          {section === 'analitica' && (
-            <>
-              <h1 className="section-title">Analítica</h1>
-              <SkuExplorer state={state} actions={actions} />
-              <div className="section-grid">
-                <div className="card"><AnalyticsPanel state={state} actions={actions} /></div>
-                <div className="card"><MeasurePanel state={state} /></div>
-              </div>
-            </>
-          )}
-          {section === 'reportes' && (
-            <>
-              <h1 className="section-title">Reportes</h1>
-              <PendingView title="Reportes" />
-            </>
-          )}
+          {section === 'dashboard' && <DashboardPage state={state} actions={actions} />}
+          {section === 'inventario' && <InventoryPage state={state} actions={actions} onEvidence={openUnitEvidence} />}
+          {section === 'eventos' && <EventsPage state={state} actions={actions} onEvidence={(row) => setEvidence({ row })} />}
+          {section === 'analitica' && <AnalyticsPage state={state} actions={actions} />}
+          {section === 'acciones' && <ActionsPage state={state} actions={actions} />}
         </main>
       </div>
-      <DetailDrawer state={state} actions={actions} />
+      <EvidenceDrawer state={state} target={evidence} onClose={closeEvidence} />
       <Toast text={state.ui.playback === null ? state.lastMessage?.text ?? null : null} />
     </div>
   );

@@ -19,8 +19,6 @@ export type DemoAction =
   | { type: 'CLOSE_RECEIPT'; purchaseOrderId: string; closedAt: string }
   | { type: 'SET_PLAYBACK'; scenarioId: string | null }
   | { type: 'SET_SECTION'; section: Section }
-  | { type: 'SET_STEP'; step: number }
-  | { type: 'SET_DRAWER'; open: boolean }
   | { type: 'SET_SKU'; skuId: string | null }
   | { type: 'FOCUS_UNIT'; unitId: string }
   | { type: 'START_MOVEMENT'; movementId: string; at: string }
@@ -100,11 +98,7 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
     case 'CLOSE_RECEIPT':
       return closeReceipt(state, action.purchaseOrderId, action.closedAt);
     case 'SET_SECTION':
-      return { ...state, ui: { ...state.ui, section: action.section, drawer: false } };
-    case 'SET_STEP':
-      return { ...state, ui: { ...state.ui, step: Math.max(0, Math.min(5, action.step)), drawer: false } };
-    case 'SET_DRAWER':
-      return { ...state, ui: { ...state.ui, drawer: action.open } };
+      return { ...state, ui: { ...state.ui, section: action.section } };
     case 'SET_SKU':
       if (action.skuId !== null && !state.skus.some((k) => k.id === action.skuId)) return state;
       return { ...state, ui: { ...state.ui, skuId: action.skuId } };
