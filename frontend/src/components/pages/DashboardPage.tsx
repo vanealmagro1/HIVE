@@ -3,9 +3,8 @@ import { Archive, CircleDollarSign, Clock, MapPin, PackageSearch, Radio, Trendin
 import { useMemo, useState } from 'react';
 import { formatNumber, formatUsd } from '../../domain/format';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
-import { attentionItems, beaconCount, eventHistory, fmtDateTime, movementsByDay, occupancy, verification, type AttentionItem } from '../../store/operations';
-import { BEACON_BOXES } from '../../seed/seed';
-import { kpis, unitContents } from '../../store/selectors';
+import { attentionItems, eventHistory, fmtDateTime, liveInventory, movementsByDay, occupancy, type AttentionItem } from '../../store/operations';
+import { kpis } from '../../store/selectors';
 import type { Actions } from '../actions';
 import MovementsChart from '../charts/MovementsChart';
 import { Chip, Kpi, PageHead } from '../layout/Shell';
@@ -44,47 +43,45 @@ export function AttentionList({ items, actions }: { items: AttentionItem[]; acti
 const LIVE_TEXT = { off: 'Lector en vivo apagado', connecting: 'Conectando lector…', connected: 'Lector en vivo · conectado', offline: 'Lector sin conexión' } as const;
 const LIVE_TONE = { off: 'sim', connecting: 'warn', connected: 'ok', offline: 'bad' } as const;
 
-/** Conteo automático: las cajas con beacon pasan a "Verificada" en cuanto el lector las lee. */
+/** Inventario contado en vivo: cada caja leída por el lector entra como fila nueva y los totales suben. */
 function LiveCount({ state, actions }: { state: DemoState; actions: Actions }) {
-  const c = beaconCount(state);
+  const inv = liveInventory(state);
+  const time = (iso: string) => fmtDateTime(iso).split(', ')[1] ?? iso;
   return (
-    <section className="card live-card" data-testid="live-count">
+    <section className="card card-flush live-card" data-testid="live-count">
       <div className="card-head">
         <div>
-          <h2 className="card-title">Conteo automático · cajas con etiqueta</h2>
-          <p className="card-sub">Sin reconteo manual: el lector verifica cada caja en segundos.</p>
+          <h2 className="card-title">Inventario contado ahora</h2>
+          <p className="card-sub">Sin reconteo manual: cada caja se suma en cuanto el lector lee su etiqueta.</p>
         </div>
         <Chip tone={LIVE_TONE[state.ui.live]}><Radio size={12} /> {LIVE_TEXT[state.ui.live]}</Chip>
       </div>
-      <div className="live-body">
-        <div className="live-total">
-          <div className="live-big" data-testid="live-verified">{c.verified} <span>de {c.total}</span></div>
-          <div className="kpi-caption">cajas verificadas hoy{c.misplaced ? ` · ${c.misplaced} fuera de lugar` : ''}</div>
-          <div className="bar"><span style={{ width: `${(c.verified / c.total) * 100}%` }} /></div>
-          <div className="kpi-caption">{c.lastAt ? `Última lectura: beacon ${c.lastLabel} · ${fmtDateTime(c.lastAt)}` : 'Esperando la primera lectura…'}</div>
-        </div>
-        <div className="live-boxes">
-          {BEACON_BOXES.map((b) => {
-            const u = state.units.find((x) => x.id === b.unitId);
-            if (!u) return null;
-            const v = verification(u);
-            const read = state.events.some((e) => e.source === 'BLE' && e.unitId === u.id);
-            const tone = !read ? 'sim' : v.tone;
-            return (
-              <button key={`${b.unitId}-${read}`} type="button" className={`live-box tone-${tone}${read ? ' is-read' : ' is-hidden'}`}
-                onClick={read ? () => actions.locateUnit(u.id) : undefined} data-testid={`live-box-${b.label}`}>
-                <span className="live-tag">{read ? b.label : '?'}</span>
-                {/* El producto se revela solo cuando el lector lee la etiqueta. */}
-                <span className="live-info">
-                  <strong>{read ? unitContents(state, u).title : 'Caja por leer'}</strong>
-                  <span>{read ? `${u.id} · ${u.expectedLocationId}` : `Etiqueta ${b.label} · acerca el lector`}</span>
-                </span>
-                <Chip tone={tone}>{!read ? 'Sin lectura' : v.tone === 'ok' ? 'Verificada' : 'Fuera de lugar'}</Chip>
-              </button>
-            );
-          })}
-        </div>
+      <div className="live-totals">
+        <div><span className="live-big" data-testid="live-boxes">{inv.countedBoxes}</span><span className="live-of"> de {inv.totalBoxes} cajas</span></div>
+        <div><span className="live-big" data-testid="live-units">{formatNumber(inv.countedUnits)}</span><span className="live-of"> de {formatNumber(inv.totalUnits)} unidades</span></div>
+        <div className="live-progress"><div className="bar"><span style={{ width: `${(inv.countedBoxes / inv.totalBoxes) * 100}%` }} /></div></div>
       </div>
+      <table className="table live-table" data-testid="live-table">
+        <thead><tr><th>Hora</th><th>Producto</th><th>Caja</th><th className="num">Cantidad</th><th>Ubicación leída</th><th>Estado</th></tr></thead>
+        <tbody>
+          {inv.rows.map((r) => (
+            <tr key={r.eventId} className="row-live" onClick={() => actions.locateUnit(r.unitId)} style={{ cursor: 'pointer' }}>
+              <td className="cell-date">{time(r.readAt)}</td>
+              <td><span className="live-chiptag">{r.label}</span> <span className="cell-main">{r.product}</span></td>
+              <td className="cell-sub">{r.unitId}</td>
+              <td className="num"><strong>{formatNumber(r.qty)} u</strong></td>
+              <td>{r.readLocation}{!r.ok && <div className="cell-sub">su lugar: {r.expectedLocation}</div>}</td>
+              <td><Chip tone={r.ok ? 'ok' : 'bad'}>{r.ok ? '✓ Contada' : 'Fuera de lugar'}</Chip></td>
+            </tr>
+          ))}
+          {inv.rows.length === 0 && <tr><td colSpan={6} className="empty">Esperando la primera lectura… acerca el lector a una caja.</td></tr>}
+        </tbody>
+      </table>
+      {inv.pending.length > 0 && (
+        <div className="live-pending" data-testid="live-pending">
+          Pendiente{inv.pending.length > 1 ? 's' : ''}: {inv.pending.map((p) => `caja con etiqueta ${p.label}`).join(' · ')}
+        </div>
+      )}
     </section>
   );
 }

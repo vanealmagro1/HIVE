@@ -109,22 +109,31 @@ describe('HIVE UI v2 · operaciones', () => {
     expect(screen.getByTestId('kpi-units').textContent).toBe('13.599');
   }, 30_000);
 
-  it('Dashboard en vivo: una lectura de beacon (plan B Alt+1) verifica la caja y aparece en la actividad', async () => {
+  it('Dashboard en vivo: cada caja leída (plan B Alt+1) entra al inventario contado y suben los totales', async () => {
     const store = createDemoStore();
     const user = userEvent.setup();
     render(<App store={store} />);
-    expect(screen.getByTestId('live-verified').textContent).toMatch(/^0 de 3/);
-    expect(within(screen.getByTestId('live-box-4')).getByText('Sin lectura')).toBeTruthy();
-    expect(screen.getByTestId('live-box-4').textContent).toMatch(/Caja por leer/); // el producto aún no se revela
-    expect(screen.getByTestId('live-box-4').textContent).not.toMatch(/Cuaderno/);
+    expect(screen.getByTestId('live-boxes').textContent).toBe('0');
+    expect(screen.getByTestId('live-units').textContent).toBe('0');
+    expect(screen.getByTestId('live-table').textContent).toMatch(/Esperando la primera lectura/);
+    expect(screen.getByTestId('live-pending').textContent).not.toMatch(/Cuaderno/); // el producto aún no se revela
+
     await user.keyboard('{Alt>}1{/Alt}');
-    expect(screen.getByTestId('live-verified').textContent).toMatch(/^1 de 3/);
-    expect(within(screen.getByTestId('live-box-4')).getByText('Verificada')).toBeTruthy();
-    expect(screen.getByTestId('live-box-4').textContent).toMatch(/Cuaderno universitario/);
-    expect(screen.getAllByText('Beacon · celular').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('last-message').textContent).toMatch(/Cuaderno universitario 100 h cuadros grandes \(CJ-0003\) verificada en B-05-03/);
-    await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');
-    expect(within(screen.getByTestId('live-box-7')).getByText('Fuera de lugar')).toBeTruthy();
+    expect(screen.getByTestId('live-boxes').textContent).toBe('1');
+    expect(screen.getByTestId('live-units').textContent).toBe('20');
+    const table = screen.getByTestId('live-table');
+    expect(table.textContent).toMatch(/Cuaderno universitario 100 h cuadros grandesCJ-000320 uB-05-03✓ Contada/);
+    expect(screen.getByTestId('last-message').textContent).toMatch(/\(CJ-0003\) verificada en B-05-03/);
+
+    await user.keyboard('{Alt>}2{/Alt}');
+    expect(screen.getByTestId('live-units').textContent).toBe('82');
+    expect(within(screen.getByTestId('live-table')).getAllByRole('row')[1].textContent).toMatch(/Esferográfico punta fina negro/); // la más reciente arriba
+
+    await user.keyboard('{Alt>}{Shift>}3{/Shift}{/Alt}');
+    expect(screen.getByTestId('live-boxes').textContent).toBe('3');
+    expect(screen.getByTestId('live-units').textContent).toBe('100');
+    expect(screen.getByTestId('live-table').textContent).toMatch(/Fuera de lugar/);
+    expect(screen.queryByTestId('live-pending')).toBeNull();
     expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
   });
 

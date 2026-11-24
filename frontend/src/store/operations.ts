@@ -234,3 +234,33 @@ export function beaconCount(state: DemoState): BeaconCount {
   const last = ble.at(-1) ?? null;
   return { verified, total: BEACON_BOXES.length, misplaced, lastAt: last?.capturedAt ?? null, lastLabel: last ? beaconLabel(last.unitId) : null };
 }
+
+export interface LiveRow { unitId: string; label: string; product: string; qty: number; readAt: string; readLocation: string; expectedLocation: string; ok: boolean; eventId: string }
+export interface LiveInventory { rows: LiveRow[]; pending: { unitId: string; label: string; product: string }[]; countedBoxes: number; totalBoxes: number; countedUnits: number; totalUnits: number }
+
+/**
+ * Inventario contado en vivo con los beacons: una fila por caja leída (su última lectura, la más reciente arriba),
+ * cajas pendientes y totales de cajas y unidades contadas frente a las esperadas.
+ */
+export function liveInventory(state: DemoState): LiveInventory {
+  const ble = state.events.filter((e) => e.source === 'BLE');
+  const rows: LiveRow[] = [];
+  const pending: LiveInventory['pending'] = [];
+  let totalUnits = 0;
+  for (const b of BEACON_BOXES) {
+    const u = state.units.find((x) => x.id === b.unitId);
+    if (!u) continue;
+    const c = unitContents(state, u);
+    totalUnits += c.qty;
+    const last = [...ble].reverse().find((e) => e.unitId === u.id);
+    if (!last) { pending.push({ unitId: u.id, label: b.label, product: c.title }); continue; }
+    rows.push({
+      unitId: u.id, label: b.label, product: c.title, qty: c.qty, readAt: last.capturedAt,
+      readLocation: last.locationHintId ?? '—', expectedLocation: u.expectedLocationId,
+      ok: last.locationHintId === u.expectedLocationId && u.verificationStatus === 'OBSERVED', eventId: last.id,
+    });
+  }
+  const order = new Map(ble.map((e, i) => [e.id, i]));
+  rows.sort((a, b) => (order.get(b.eventId) ?? 0) - (order.get(a.eventId) ?? 0));
+  return { rows, pending, countedBoxes: rows.length, totalBoxes: BEACON_BOXES.length, countedUnits: rows.reduce((t, r) => t + r.qty, 0), totalUnits };
+}
