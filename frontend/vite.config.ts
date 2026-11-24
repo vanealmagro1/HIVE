@@ -9,6 +9,9 @@ const BEACON_CATALOG = fileURLToPath(new URL('../beacons/beacons.json', import.m
 
 export default defineConfig({
   plugins: [react(), hiveRelay(BEACON_CATALOG)],
+  // Túnel de Cloudflare (https://*.trycloudflare.com): permite abrir HIVE y el lector desde cualquier red.
+  server: { allowedHosts: ['.trycloudflare.com'] },
+  preview: { allowedHosts: ['.trycloudflare.com'] },
   // El bundle 3D (three.js) se carga bajo demanda; su tamaño es esperado para una demo local.
   build: {
     chunkSizeWarningLimit: 1200,
