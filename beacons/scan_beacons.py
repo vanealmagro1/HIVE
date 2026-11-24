@@ -72,11 +72,16 @@ def same_ids(a: list[str] | set[str], b: list[str] | set[str]) -> bool:
     return any(x.startswith(y) or y.startswith(x) for x in a for y in b if len(x) >= 3 and len(y) >= 3)
 
 
-def label_for(seen: Seen, catalog: list[dict]) -> str:
+def catalog_entry(seen: Seen, catalog: list[dict]) -> dict | None:
     for e in catalog:
         if e.get("beacon") == seen.key or same_ids(e.get("ids", []), seen.idents.values()):
-            return str(e.get("etiqueta", "?"))
-    return "—"
+            return e
+    return None
+
+
+def label_for(seen: Seen, catalog: list[dict]) -> str:
+    e = catalog_entry(seen, catalog)
+    return str(e.get("etiqueta", "?")) if e else "—"
 
 
 class Scanner:
@@ -134,7 +139,9 @@ class Scanner:
         ]
         for s in rows:
             age = now - s.last
-            beacon = s.idents.get("Estimote", "")[:8] or (s.name or sorted(s.addresses)[0])[:9]
+            known = catalog_entry(s, catalog)
+            long_ids = [i for i in (known or {}).get("ids", []) if len(i) >= 16]
+            beacon = (s.idents.get("Estimote") or (long_ids[0] if long_ids else "") or s.name or sorted(s.addresses)[0])[:8]
             ibeacon = s.idents.get("iBeacon", "—")
             prox = "fuera de alcance" if age > OUT_OF_RANGE_S else proximity(s.distance)
             lines.append(
