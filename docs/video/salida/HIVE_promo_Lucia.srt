@@ -1,0 +1,96 @@
+1
+00:00:00,300 --> 00:00:05,950
+Lunes, siete y cuarenta. Temporada escolar
+en Quito.
+
+2
+00:00:06,200 --> 00:00:11,301
+Trece mil seiscientas unidades. Doscientos
+cuarenta y siete productos.
+
+3
+00:00:11,351 --> 00:00:13,950
+Y todo, en papel y hojas de cálculo.
+
+4
+00:00:14,200 --> 00:00:18,524
+Una caja que no llegó. Mochilas en el
+pasillo equivocado. Producto que no rota.
+
+5
+00:00:18,574 --> 00:00:23,950
+Pequeñas fugas que, en bodegas como esta,
+pueden costar entre tres mil y cinco mil
+dólares al mes.
+
+6
+00:00:24,300 --> 00:00:27,950
+Ahora imagina verla así.
+
+7
+00:00:28,400 --> 00:00:33,712
+Llega el camión. El portal RFID del andén
+lee cada caja al pasar: once de doce.
+
+8
+00:00:33,762 --> 00:00:39,550
+Falta una caja, veinticuatro unidades, y
+HIVE lo detecta antes de firmar la
+recepción.
+
+9
+00:00:39,800 --> 00:00:47,914
+Más tarde, en el conteo con lector de mano,
+aparecen las mochilas del pallet cero cero
+uno…
+
+10
+00:00:47,964 --> 00:00:49,350
+en el pasillo D.
+
+11
+00:00:49,600 --> 00:00:53,166
+HIVE no cambia el inventario oficial por su
+cuenta:
+
+12
+00:00:53,216 --> 00:00:57,350
+pide que alguien lo verifique, con la
+evidencia a la vista.
+
+13
+00:00:57,600 --> 00:01:02,075
+Por separado, revisa la cobertura: sesenta
+días cuando el objetivo es treinta.
+
+14
+00:01:02,125 --> 00:01:05,150
+Dos mil cuatrocientos dólares de exposición
+estimada.
+
+15
+00:01:05,400 --> 00:01:11,350
+HIVE recomienda redistribuir trescientas
+unidades. Lucía decide.
+
+16
+00:01:11,600 --> 00:01:14,325
+La aprobación crea una tarea registrada.
+
+17
+00:01:14,375 --> 00:01:23,551
+El montacargas lleva los pallets al muelle,
+Quito Sur confirma lo que recibe, y las dos
+bodegas quedan con treinta días de
+cobertura.
+
+18
+00:01:23,601 --> 00:01:26,950
+El stock total no cambia: se pone donde se
+vende.
+
+19
+00:01:27,300 --> 00:01:33,750
+HIVE. De los datos de tu bodega a mejores
+decisiones. Agenda una demo para tu bodega.
+

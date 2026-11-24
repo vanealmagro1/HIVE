@@ -1,0 +1,14 @@
+canvas: 1 | 2D: 0 | carga ms: 3069
+unidades iniciales: 13.599
+recepción: 11 de 12 cajas. Falta 1 caja · 24 u · USD 86,40El inventario solo suma lo leído. Ver la alerta para reclamar al proveedor.
+unidades tras recepción: 13.863
+alertas: 2 | marcador 3D "leído aquí": 1
+reenvío: Evento evt-demo-001 ya procesado: reenvío ignorado (idempotente). | alertas: 2
+clic 3D abre ficha: Caja CJ-0102
+MOC-001: Cobertura60 díasExceso sobre el objetivo300 unidadesValor en riesgo (exceso)USD 2.400
+tareas: 1
+tras reset: unidades 13.599 | marcadores: 0
+2D activo: 1
+errores/avisos de consola: [
+  'warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.'
+]

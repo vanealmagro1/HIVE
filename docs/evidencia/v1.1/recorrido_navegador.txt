@@ -1,0 +1,26 @@
+1920x1080 | scroll horizontal: false | unidades: 13.599
+recepción: 12esperadas · 288 u11detectadas · 264 u1faltante · 24 u | unidades: 13.863 | alertas: 1
+alerta: Ubicación esperada B-03-01Ubicación detectada D-07-02
+impacto: 60 díascobertura300unidades excedentesUSD 2.400exposición estimada
+registro: Tareatask-rec-moc-001ResponsableSupervisor de inventarios (demo)EstadoPendiente de ejecuciónAuditoría#73
+errores/avisos: [
+  'warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.'
+]
+1440x900 | scroll horizontal: false | unidades: 13.599
+recepción: 12esperadas · 288 u11detectadas · 264 u1faltante · 24 u | unidades: 13.863 | alertas: 1
+alerta: Ubicación esperada B-03-01Ubicación detectada D-07-02
+impacto: 60 díascobertura300unidades excedentesUSD 2.400exposición estimada
+registro: Tareatask-rec-moc-001ResponsableSupervisor de inventarios (demo)EstadoPendiente de ejecuciónAuditoría#73
+errores/avisos: [
+  'warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.'
+]
+1366x768 | scroll horizontal: false | unidades: 13.599
+recepción: 12esperadas · 288 u11detectadas · 264 u1faltante · 24 u | unidades: 13.863 | alertas: 1
+alerta: Ubicación esperada B-03-01Ubicación detectada D-07-02
+impacto: 60 díascobertura300unidades excedentesUSD 2.400exposición estimada
+registro: Tareatask-rec-moc-001ResponsableSupervisor de inventarios (demo)EstadoPendiente de ejecuciónAuditoría#73
+errores/avisos: [
+  'warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.'
+]
+
+[exited with code 0]

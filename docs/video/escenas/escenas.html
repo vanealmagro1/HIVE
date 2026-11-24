@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>HIVE · escenas de video</title>
+<!--
+  Escenas animadas de los videos de HIVE. Línea de tiempo DETERMINISTA: window.__seek(t) dibuja el instante t (s),
+  así que se graban cuadro a cuadro (30 fps) sin tirones. Uso: escenas.html?s=p1   (lista en SCENES, abajo).
+  Lienzo lógico 1366×768 (se graba con escala 1,40625 → 1920×1080). Personaje y bodega ficticios.
+-->
+<style>
+  @font-face { font-family: 'Inter'; src: url('../../../frontend/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
+  :root { --ink: #17142f; --purple: #6336e8; --purple2: #7c4dff; --soft: #efe9ff; --bg: #f5f6fa; --amber: #f59e0b; --red: #ef4444; --green: #16a34a; --muted: #667085; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1366px; height: 768px; overflow: hidden; background: var(--bg); font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; overflow: hidden; }
+  svg { position: absolute; inset: 0; }
+  .txt { position: absolute; will-change: transform, opacity; }
+  .big { font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 18px; background: #fff; box-shadow: 0 6px 18px rgba(23,20,47,.10); }
+  .card { background: #fff; border-radius: 18px; box-shadow: 0 10px 30px rgba(23,20,47,.12); padding: 18px 22px; }
+  .foot { font-size: 14px; color: var(--muted); }
+  .badge { position: absolute; right: 22px; bottom: 18px; font-size: 13px; font-weight: 600; color: var(--muted); background: rgba(255,255,255,.85); padding: 6px 12px; border-radius: 999px; }
+  .dark .badge { background: rgba(255,255,255,.08); color: #c9c6e4; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+// ── utilidades ────────────────────────────────────────────────────────────
+const W = 1366, H = 768;
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (k) => 1 - Math.pow(1 - k, 3);                 // salida suave
+const easeIO = (k) => (k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const lerp = (a, b, k) => a + (b - a) * k;
+const fmt = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function div(html, style, parent, cls = 'txt') { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; Object.assign(d.style, style); (parent || stage).appendChild(d); return d; }
+function show(node, o, dx = 0, dy = 0, s = 1) { node.style.opacity = o; node.style.transform = `translate(${dx}px,${dy}px) scale(${s})`; }
+const stage = document.getElementById('stage');
+const HEX = (cx, cy, r) => Array.from({ length: 6 }, (_, i) => { const a = Math.PI / 3 * i - Math.PI / 2; return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`; }).join(' ');
+const LOGO = (size = 64) => `<span style="display:inline-grid;place-items:center;width:${size}px;height:${size}px;border-radius:${size * .26}px;background:linear-gradient(135deg,#7c4dff,#6336e8);box-shadow:0 6px 22px rgba(124,77,255,.45)"><svg viewBox="0 0 24 24" width="${size * .58}" height="${size * .58}" style="position:static" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>`;
+const ICON = {
+  box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  alert: '<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4M12 17h.01"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/>',
+  trend: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  hand: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/>',
+};
+const ico = (k, c = 'currentColor', s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="position:static;flex:none" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+
+// ── ilustración isométrica ────────────────────────────────────────────────
+// Proyección: x hacia la derecha-abajo, y hacia la izquierda-abajo, z hacia arriba.
+function isoP(o, x, y, z) { return [o.x + (x - y) * o.s * 0.866, o.y + (x + y) * o.s * 0.5 - z * o.s]; }
+function prism(g, o, x, y, z, w, d, h, c) {
+  const P = (a, b, cz) => isoP(o, a, b, cz).join(',');
+  el('polygon', { points: [P(x, y + d, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x, y + d, z + h)].join(' '), fill: c[1] }, g); // frente izq.
+  el('polygon', { points: [P(x + w, y, z), P(x + w, y + d, z), P(x + w, y + d, z + h), P(x + w, y, z + h)].join(' '), fill: c[2] }, g); // frente der.
+  el('polygon', { points: [P(x, y, z + h), P(x + w, y, z + h), P(x + w, y + d, z + h), P(x, y + d, z + h)].join(' '), fill: c[0] }, g); // tapa
+}
+const KRAFT = ['#e9c48f', '#c99a5b', '#b3844a'];
+const MOCH = ['#f2a8c4', '#d77c9f', '#c0668a'];
+const GREYB = ['#d8d4cf', '#b9b2aa', '#a39b92'];
+const RACKC = ['#dfe6f5', '#2f5fb3', '#244c93'];
+/** Bodega: piso, racks con cajas y andén. `opts.racks` = filas (x) y `opts.boxes(i,j,k)` = color de cada caja. */
+function warehouse(g, o, opts = {}) {
+  const floor = [isoP(o, -1, -1, 0), isoP(o, 23, -1, 0), isoP(o, 23, 17, 0), isoP(o, -1, 17, 0)].map((p) => p.join(',')).join(' ');
+  el('polygon', { points: floor, fill: opts.floor || '#e8e6f0' }, g);
+  // franjas de pasillo
+  for (const row of [3.2, 8.2, 13.2]) {
+    el('polygon', { points: [isoP(o, row, 0.4, 0), isoP(o, row + 1.6, 0.4, 0), isoP(o, row + 1.6, 13.6, 0), isoP(o, row, 13.6, 0)].map((p) => p.join(',')).join(' '), fill: opts.aisle || '#dcd9e7' }, g);
+  }
+  // Orden del pintor: primero lo más lejano (x + y menor) y, a igual profundidad, lo más bajo.
+  const q = [];
+  const add = (x, y, z, w, d, h, c, key) => q.push({ k: key ?? x + w + y + d, z, a: [x, y, z, w, d, h, c] });
+  const rows = opts.rows || [1, 5, 6, 10, 11, 15];
+  rows.forEach((rx, i) => {
+    for (let j = 0; j < 6; j += 1) {
+      const y = 1 + j * 2.1;
+      for (let lv = 0; lv < 3; lv += 1) {
+        add(rx, y, lv * 1.25, 1.6, 2.0, 0.08, ['#f0a33b', '#d9851d', '#c4740f'], rx + y); // bandeja (misma celda que su caja)
+        const c = opts.boxes ? opts.boxes(i, j, lv) : KRAFT;
+        if (c) add(rx + 0.15, y + 0.2, lv * 1.25 + 0.08, 1.3, 1.6, 0.85, c, rx + y);
+      }
+    }
+    add(rx, 13.6, 0, 0.12, 0.12, 3.6, RACKC);
+    add(rx + 1.5, 13.6, 0, 0.12, 0.12, 3.6, RACKC);
+  });
+  (opts.extra || []).forEach((e) => add(...e));
+  q.sort((m, n) => m.k - n.k || m.z - n.z).forEach((it) => prism(g, o, ...it.a));
+  // andén (al frente, a la derecha)
+  prism(g, o, 17.5, 3, 0, 4.5, 9, 0.25, ['#d6d3e2', '#b8b4c9', '#a7a2bb']);
+  return g;
+}
+
+// ── Lucía (personaje ficticio, ilustración plana) ─────────────────────────
+function lucia(parent) {
+  const g = el('g', {}, parent);
+  const body = el('g', {}, g);
+  el('rect', { x: -15, y: 58, width: 12, height: 62, rx: 6, fill: '#2a2f45' }, body); // piernas
+  const legR = el('rect', { x: 3, y: 58, width: 12, height: 62, rx: 6, fill: '#2a2f45' }, body);
+  el('rect', { x: -26, y: -8, width: 52, height: 74, rx: 20, fill: '#ffffff' }, body);       // camisa
+  el('path', { d: 'M-26 6 Q-26 -8 -12 -8 L-6 -8 L-6 66 L-26 66 Z M26 6 Q26 -8 12 -8 L6 -8 L6 66 L26 66 Z', fill: '#6336e8' }, body); // chaleco
+  el('rect', { x: 14, y: 22, width: 12, height: 4, rx: 2, fill: '#c9b8ff' }, body);
+  const arm = el('g', {}, body);
+  el('rect', { x: 18, y: 0, width: 11, height: 46, rx: 5.5, fill: '#ffffff' }, arm);
+  el('rect', { x: 26, y: 26, width: 30, height: 38, rx: 4, fill: '#8a6a43' }, arm);           // portapapeles
+  el('rect', { x: 30, y: 31, width: 22, height: 29, rx: 2, fill: '#fbfaf7' }, arm);
+  for (let i = 0; i < 4; i += 1) el('rect', { x: 33, y: 36 + i * 6, width: 15 - (i % 2) * 5, height: 2, fill: '#c9c6d8' }, arm);
+  const head = el('g', {}, g);
+  el('circle', { cx: 0, cy: -30, r: 21, fill: '#c98b62' }, head);
+  el('path', { d: 'M-22 -32 Q-22 -56 0 -55 Q22 -56 22 -32 Q16 -44 0 -45 Q-14 -44 -22 -32 Z', fill: '#2b1d16' }, head);
+  el('circle', { cx: 16, cy: -52, r: 9, fill: '#2b1d16' }, head);                            // moño
+  el('circle', { cx: -7, cy: -30, r: 2.2, fill: '#2b1d16' }, head);
+  el('circle', { cx: 8, cy: -30, r: 2.2, fill: '#2b1d16' }, head);
+  const mouth = el('path', { d: 'M-5 -20 Q0 -16 5 -20', stroke: '#7a3e2a', 'stroke-width': 2.2, fill: 'none', 'stroke-linecap': 'round' }, head);
+  return { g, head, arm, legR, mouth,
+    set(x, y, s = 1, walk = 0, nod = 0, mood = 0) {
+      const bob = Math.abs(Math.sin(walk * Math.PI)) * 4;
+      g.setAttribute('transform', `translate(${x},${y - bob}) scale(${s})`);
+      legR.setAttribute('transform', `translate(0,${-Math.abs(Math.sin(walk * Math.PI)) * 6})`);
+      head.setAttribute('transform', `rotate(${nod * 8},0,-10) translate(0,${nod * 3})`);
+      mouth.setAttribute('d', mood < 0 ? 'M-5 -17 Q0 -21 5 -17' : 'M-5 -20 Q0 -16 5 -20');
+    } };
+}
+
+// ── escenas ───────────────────────────────────────────────────────────────
+const SCENES = {
+  // Promo 1 · 0:00–0:06 · Lunes 7:40, Lucía entra a la bodega.
+  p1: { dur: 6, init() {
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+    const sky = el('rect', { x: 0, y: 0, width: W, height: H, fill: '#f3efff' }, svg);
+    const sun = el('circle', { cx: 1120, cy: 210, r: 70, fill: '#ffd9a8' }, svg);
+    const world = el('g', {}, svg);
+    warehouse(world, { x: 720, y: 215, s: 23 });
+    const L = lucia(svg);
+    const clock = div(`<span class="chip">${ico('clock', '#6336e8')} Lunes · 7:40</span>`, { left: '64px', top: '56px' });
+    const place = div('<div class="big" style="font-size:54px">Bodega Quito Norte</div><div style="font-size:22px;color:#667085;font-weight:600;margin-top:6px">Temporada escolar · papelería y tecnología</div>', { left: '64px', top: '118px' });
+    const veil = div('', { left: 0, top: 0, width: W + 'px', height: H + 'px', background: '#17142f' });
+    this.u = (t) => {
+      sky.setAttribute('fill', `hsl(${lerp(28, 255, ease(seg(t, 0, 4)))},${lerp(90, 70, seg(t, 0, 4))}%,${lerp(92, 96, seg(t, 0, 4))}%)`);
+      sun.setAttribute('cy', lerp(330, 190, ease(seg(t, 0, 5))));
+      world.setAttribute('transform', `translate(${lerp(60, 0, ease(seg(t, 0, 6)))},0) scale(${lerp(1.04, 1, seg(t, 0, 6))})`);
+      const wk = seg(t, 0.6, 4.2);
+      L.set(lerp(-60, 300, ease(wk)), 600, 1.25, wk < 1 ? t * 1.8 : 0, 0, 0);
+      show(clock, ease(seg(t, 0.4, 1.1)), 0, lerp(-14, 0, ease(seg(t, 0.4, 1.1))));
+      show(place, ease(seg(t, 1.0, 1.8)), lerp(-24, 0, ease(seg(t, 1.0, 1.8))));
+      veil.style.opacity = 1 - seg(t, 0, 0.7);
+    };
+  } },
+
+  // Promo 2 · 0:06–0:14 · 13.600 unidades, 247 productos, todo en papel.
+  p2: { dur: 8, init() {
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+    el('rect', { x: 0, y: 0, width: W, height: H, fill: '#f5f3fb' }, svg);
+    const papers = [];
+    for (let i = 0; i < 26; i += 1) {
+      const p = el('g', {}, svg);
+      const sheet = i % 3 === 0;
+      el('rect', { x: -34, y: -44, width: 68, height: 88, rx: 4, fill: '#fff', stroke: '#d6d3e2' }, p);
+      if (sheet) { for (let r = 0; r < 5; r += 1) for (let c = 0; c < 3; c += 1) el('rect', { x: -28 + c * 19, y: -36 + r * 15, width: 17, height: 12, fill: r === 0 ? '#bfe3c9' : '#eef6f0' }, p); }
+      else for (let r = 0; r < 6; r += 1) el('rect', { x: -26, y: -32 + r * 11, width: 52 - (r % 3) * 12, height: 3, fill: '#c9c6d8' }, p);
+      papers.push({ p, a: (i * 137.5) % 360, r: 150 + (i * 53) % 230, sp: 0.25 + (i % 5) * 0.06, born: 0.8 + i * 0.16 });
+    }
+    const L = lucia(svg);
+    const cnt = div('<div class="big" style="font-size:132px;color:#6336e8;line-height:1">0</div><div style="font-size:30px;font-weight:700;margin-top:4px">unidades</div>', { left: '760px', top: '170px' });
+    const prod = div('<div class="big" style="font-size:72px;line-height:1">247</div><div style="font-size:26px;font-weight:700">productos</div>', { left: '760px', top: '400px' });
+    const xls = div(`<span class="chip" style="background:#fff6e5;color:#92400e">${ico('alert', '#d97706')} Todo en papel y hojas de cálculo</span>`, { left: '760px', top: '560px' });
+    this.u = (t) => {
+      papers.forEach((q, i) => {
+        const k = seg(t, q.born, q.born + 1.2);
+        const ang = (q.a + t * 40 * q.sp * (i % 2 ? 1 : -1)) * Math.PI / 180;
+        const r = q.r * ease(k);
+        q.p.setAttribute('transform', `translate(${330 + Math.cos(ang) * r},${430 + Math.sin(ang) * r * 0.62}) rotate(${(q.a + t * 30) % 360 - 180}) scale(${0.6 + 0.4 * k})`);
+        q.p.setAttribute('opacity', k);
+      });
+      L.set(330, 470, 1.5, 0, 0, t > 4 ? -1 : 0);
+      cnt.firstChild.textContent = fmt(13600 * easeIO(seg(t, 0.3, 3.2)));
+      show(cnt, ease(seg(t, 0.2, 0.7)), 0, lerp(20, 0, ease(seg(t, 0.2, 0.7))));
+      show(prod, ease(seg(t, 2.6, 3.2)), lerp(-20, 0, ease(seg(t, 2.6, 3.2))));
+      show(xls, ease(seg(t, 4.2, 4.8)), 0, lerp(16, 0, ease(seg(t, 4.2, 4.8))));
+    };
+  } },
+
+  // Promo 3 · 0:14–0:24 · tres fugas y su costo estimado.
+  p3: { dur: 10, init() {
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+    el('rect', { x: 0, y: 0, width: W, height: H, fill: '#f5f3fb' }, svg);
+    const o = { x: 660, y: 70, s: 23 };
+    const dusty = (i, j, lv) => (i === 3 && j >= 1 && j <= 3 ? GREYB : (i === 1 && j === 2 && lv === 0 ? null : (i + j + lv) % 4 === 0 ? MOCH : KRAFT));
+    warehouse(el('g', {}, svg), o, { boxes: dusty });
+    const leaks = [
+      { at: 0.6, p: isoP(o, 19.5, 6, 0.6), txt: 'Una caja que no llegó', icon: 'box', c: '#f59e0b', dx: 30, dy: -64 },
+      { at: 2.0, p: isoP(o, 9, 5.5, 0.4), txt: 'Mochilas en el pasillo equivocado', icon: 'alert', c: '#f59e0b', dx: -400, dy: 30 },
+      { at: 3.4, p: isoP(o, 11.8, 6.2, 2.6), txt: 'Producto que no rota', icon: 'clock', c: '#ef4444', dx: 10, dy: -110 },
+    ];
+    // caja faltante (contorno punteado) y mochilas fuera de lugar
+    const ghost = el('g', {}, svg); prism(ghost, o, 19, 5.4, 0.25, 1.3, 1.5, 0.9, ['rgba(245,158,11,.18)', 'rgba(245,158,11,.25)', 'rgba(245,158,11,.32)']);
+    const stray = el('g', {}, svg); prism(stray, o, 8.6, 5.2, 0, 1.2, 1.4, 0.8, MOCH);
+    const marks = leaks.map((L) => {
+      const ring = el('circle', { cx: L.p[0], cy: L.p[1], r: 10, fill: 'none', stroke: L.c, 'stroke-width': 4 }, svg);
+      const lead = el('line', { x1: L.p[0], y1: L.p[1], x2: L.p[0] + L.dx + (L.dx < 0 ? 380 : 20), y2: L.p[1] + L.dy + 20, stroke: L.c, 'stroke-width': 2, 'stroke-dasharray': '4 4', class: 'lead' }, svg);
+      const label = div(`<span class="chip" style="font-size:17px">${ico(L.icon, L.c, 20)} ${L.txt}</span>`, { left: `${L.p[0] + L.dx}px`, top: `${L.p[1] + L.dy}px` });
+      return { ring, label, L, lead };
+    });
+    const cost = div('<div class="card" style="text-align:center;padding:16px 34px"><div style="font-size:18px;font-weight:700;color:#667085">Pequeñas fugas que pueden costar</div><div class="big" style="font-size:54px;color:#b91c1c;line-height:1.1;white-space:nowrap">USD 3.000–5.000<span style="font-size:28px"> /mes*</span></div></div>', { left: '50%', top: '540px', marginLeft: '-340px', width: '680px' });
+    const note = div('<span class="foot">*Estimación del análisis de mercado de HIVE para distribuidoras de 10.000–20.000 unidades. No es un dato de clientes.</span>', { left: 0, width: W + 'px', textAlign: 'center', top: '722px' });
+    this.u = (t) => {
+      ghost.setAttribute('opacity', seg(t, 0.6, 1.1) * (0.6 + 0.4 * Math.sin(t * 5)));
+      stray.setAttribute('opacity', seg(t, 2.0, 2.4));
+      marks.forEach(({ ring, label, L, lead }) => {
+        const k = seg(t, L.at, L.at + 0.5);
+        const pulse = Math.max(0, t - L.at) % 1.4 / 1.4;
+        ring.setAttribute('r', 10 + pulse * 26);
+        ring.setAttribute('opacity', k * (1 - pulse));
+        show(label, ease(k), 0, lerp(12, 0, ease(k)));
+        lead.setAttribute('opacity', k);
+      });
+      const kc = seg(t, 5.2, 5.9);
+      show(cost, ease(kc), 0, lerp(30, 0, ease(kc)));
+      show(note, seg(t, 6.2, 6.8));
+      stage.style.filter = `saturate(${1 - 0.35 * seg(t, 8.8, 10)})`;
+    };
+  } },
+
+  // Promo 4 · 0:24–0:28 · hexágonos → logo HIVE → lema; abre al gemelo.
+  p4: { dur: 4, init() {
+    stage.classList.add('dark');
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+    const bg = el('rect', { x: 0, y: 0, width: W, height: H, fill: '#17142f' }, svg);
+    const hexes = Array.from({ length: 22 }, (_, i) => ({ h: el('polygon', { fill: 'none', stroke: i % 3 ? '#7c4dff' : '#c9b8ff', 'stroke-width': 2 }, svg), a: i * 0.9, r: 260 + (i * 71) % 300, s: 14 + (i * 7) % 26 }));
+    const logo = div(`<div style="display:flex;align-items:center;gap:22px">${LOGO(96)}<span class="big" style="font-size:96px;color:#fff;letter-spacing:.04em">HIVE</span></div>`, { left: '50%', top: '290px', marginLeft: '-200px' });
+    const tag = div('<div style="font-size:30px;font-weight:600;color:#c9c6e4;text-align:center;width:900px">De los datos de tu bodega a mejores decisiones.</div>', { left: '50%', top: '430px', marginLeft: '-450px' });
+    const iris = div('', { left: '50%', top: '50%', width: '40px', height: '40px', marginLeft: '-20px', marginTop: '-20px', borderRadius: '50%', background: '#f5f6fa' });
+    this.u = (t) => {
+      hexes.forEach((x) => {
+        const k = easeIO(seg(t, 0, 1.3));
+        const r = x.r * (1 - k);
+        x.h.setAttribute('points', HEX(683 + Math.cos(x.a + t) * r, 384 + Math.sin(x.a + t) * r, x.s * (1 - 0.6 * k)));
+        x.h.setAttribute('opacity', (1 - seg(t, 1.1, 1.4)) * 0.9);
+      });
+      const kl = seg(t, 1.1, 1.6);
+      show(logo, ease(kl), 0, 0, lerp(0.8, 1, ease(kl)));
+      show(tag, ease(seg(t, 1.6, 2.1)), 0, lerp(14, 0, ease(seg(t, 1.6, 2.1))));
+      const ki = easeIO(seg(t, 3.1, 4));
+      iris.style.transform = `scale(${ki * 48})`;
+      iris.style.opacity = ki > 0 ? 1 : 0;
+    };
+  } },
+
+  // Promo 5 · cierre · Detectar · Priorizar · Actuar · Medir + CTA.
+  p5: { dur: 7, init() { closing.call(this, { cta: 'Agenda una demo para tu bodega', sub: 'HIVE · inteligencia operativa para bodegas en Quito' }); } },
+
+  // MVP 1 · portada (3,5 s)
+  m1: { dur: 3.5, init() {
+    stage.classList.add('dark');
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+    el('rect', { x: 0, y: 0, width: W, height: H, fill: '#17142f' }, svg);
+    const grid = [];
+    for (let r = 0; r < 7; r += 1) for (let c = 0; c < 13; c += 1) grid.push({ h: el('polygon', { points: HEX(60 + c * 106 + (r % 2) * 53, 40 + r * 92, 44), fill: 'none', stroke: '#2c2752', 'stroke-width': 2 }, svg), d: Math.hypot(c - 6, r - 3) });
+    const logo = div(`<div style="display:flex;align-items:center;gap:20px">${LOGO(84)}<span class="big" style="font-size:84px;color:#fff;letter-spacing:.04em">HIVE</span></div>`, { left: '50%', top: '250px', marginLeft: '-178px' });
+    const t1 = div('<div style="text-align:center;width:1000px"><div style="display:inline-block;padding:6px 16px;border-radius:999px;background:#6336e8;color:#fff;font-weight:800;font-size:20px;letter-spacing:.08em">MVP</div><div style="font-size:34px;font-weight:700;color:#fff;margin-top:16px">Inteligencia operativa para bodegas</div><div style="font-size:20px;color:#c9c6e4;margin-top:8px">Detectar · Priorizar · Actuar · Medir</div></div>', { left: '50%', top: '370px', marginLeft: '-500px' });
+    const badge = div('Demo con lecturas RFID simuladas y datos ficticios', {}, stage, 'badge');
+    const veil = div('', { left: 0, top: 0, width: W + 'px', height: H + 'px', background: '#f5f6fa' });
+    this.u = (t) => {
+      grid.forEach((g) => g.h.setAttribute('stroke', seg(t, g.d * 0.08, g.d * 0.08 + 0.4) > 0 ? `rgba(124,77,255,${0.15 + 0.35 * (1 - seg(t, g.d * 0.08 + 0.4, g.d * 0.08 + 1.2))})` : '#2c2752'));
+      show(logo, ease(seg(t, 0.2, 0.8)), 0, 0, lerp(0.85, 1, ease(seg(t, 0.2, 0.8))));
+      show(t1, ease(seg(t, 0.8, 1.4)), 0, lerp(16, 0, ease(seg(t, 0.8, 1.4))));
+      badge.style.opacity = seg(t, 1, 1.5);
+      veil.style.opacity = seg(t, 3.0, 3.5);
+    };
+  } },
+
+  // MVP 2 · cierre (6 s): qué es real y qué es simulado, y el siguiente paso.
+  m2: { dur: 6.5, init() { closing.call(this, { cta: 'Siguiente paso: piloto en una bodega de Quito', sub: 'Funciona hoy: gemelo, conciliación, alertas, cálculos, aprobación y trazabilidad · Simulado: lecturas RFID y datos', mvp: true }); } },
+};
+
+/** Cierre común: cuatro hexágonos que se encienden y forman el logo; CTA. */
+function closing(cfg) {
+  stage.classList.add('dark');
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, stage);
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: '#17142f' }, svg);
+  const words = ['Detectar', 'Priorizar', 'Actuar', 'Medir'];
+  const icons = ['scan', 'alert', 'check', 'trend'];
+  const items = words.map((w, i) => {
+    const cx = 683 + (i - 1.5) * 220;
+    const h = el('polygon', { points: HEX(cx, 250, 70), fill: '#221e42', stroke: '#3a3466', 'stroke-width': 3 }, svg);
+    const lab = div(`<div style="width:200px;text-align:center"><div style="display:flex;justify-content:center;margin-bottom:6px">${ico(icons[i], '#fff', 34)}</div><div style="font-size:22px;font-weight:700;color:#fff">${w}</div></div>`, { left: `${cx - 100}px`, top: '215px' });
+    return { h, lab, at: 0.3 + i * 0.45 };
+  });
+  const logo = div(`<div style="display:flex;align-items:center;gap:16px">${LOGO(64)}<span class="big" style="font-size:60px;color:#fff;letter-spacing:.04em">HIVE</span></div>`, { left: '50%', top: '390px', marginLeft: '-128px' });
+  const cta = div(`<div style="text-align:center;width:1100px"><div style="font-size:${cfg.mvp ? 30 : 38}px;font-weight:800;color:#fff">${cfg.cta}</div><div style="font-size:${cfg.mvp ? 17 : 20}px;color:#c9c6e4;margin-top:12px;line-height:1.5">${cfg.sub}</div></div>`, { left: '50%', top: '490px', marginLeft: '-550px' });
+  const badge = div('Demo con lecturas RFID simuladas y datos ficticios', {}, stage, 'badge');
+  const veil = div('', { left: 0, top: 0, width: W + 'px', height: H + 'px', background: '#17142f' });
+  this.u = (t) => {
+    items.forEach((x) => {
+      const k = seg(t, x.at, x.at + 0.35);
+      x.h.setAttribute('fill', k > 0 ? `rgba(99,54,232,${0.25 + 0.75 * k})` : '#221e42');
+      x.h.setAttribute('stroke', k > 0 ? '#a58bff' : '#3a3466');
+      show(x.lab, 0.35 + 0.65 * k, 0, 0, lerp(0.92, 1, ease(k)));
+    });
+    show(logo, ease(seg(t, 2.3, 2.8)), 0, lerp(14, 0, ease(seg(t, 2.3, 2.8))));
+    show(cta, ease(seg(t, 2.9, 3.5)), 0, lerp(14, 0, ease(seg(t, 2.9, 3.5))));
+    badge.style.opacity = seg(t, 1, 1.5);
+    veil.style.opacity = Math.max(1 - seg(t, 0, 0.5), seg(t, this.dur - 0.6, this.dur));
+  };
+}
+
+// ── arranque ──────────────────────────────────────────────────────────────
+const name = new URLSearchParams(location.search).get('s') || 'p1';
+const scene = SCENES[name];
+scene.init.call(scene);
+window.__scene = { name, dur: scene.dur };
+window.__seek = (t) => scene.u(Math.max(0, Math.min(scene.dur, t)));
+window.__seek(Number(new URLSearchParams(location.search).get('t') || 0));
+</script>
+</body>
+</html>
