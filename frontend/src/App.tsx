@@ -41,7 +41,7 @@ export default function App({ store = demoStore, playback }: { store?: DemoStore
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey) return;
-      const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      const i = /^Digit[1-9]$/.test(e.code) ? Number(e.code.slice(5)) - 1 : -1;
       if (i < 0 || !BEACON_BOXES[i]) return;
       e.preventDefault();
       actions.simulateBeacon(BEACON_BOXES[i].label, e.shiftKey ? 'away' : 'home');

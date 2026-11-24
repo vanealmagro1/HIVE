@@ -134,6 +134,9 @@ describe('HIVE UI v2 · operaciones', () => {
     await user.keyboard('{Alt>}3{/Alt}');
     expect(screen.getByTestId('live-boxes').textContent).toBe('3');
     expect(screen.getByTestId('live-units').textContent).toBe('100');
+    await user.keyboard('{Alt>}4{/Alt}');
+    expect(screen.getByTestId('live-boxes').textContent).toBe('4');
+    expect(screen.getByTestId('live-units').textContent).toBe('139');
     expect(screen.queryByTestId('live-pending')).toBeNull();
     expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
   });
