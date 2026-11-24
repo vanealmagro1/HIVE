@@ -119,20 +119,19 @@ class Scanner:
     def render(self, catalog: list[dict]) -> str:
         now = time.time()
         rows = sorted(self.devices.values(), key=lambda s: -s.rssi_avg)
-        head = f"{'Etiq.':<6}{'Beacon':<19}{'Identificador':<26}{'Paquetes':<22}{'RSSI':>6}{'Dist.':>9}  {'Proximidad':<12}{'Visto'}"
+        head = f"{'Etiq.':<6}{'Beacon':<10}{'iBeacon':<12}{'RSSI':>5}{'Dist.':>8}  {'Proximidad':<17}{'Visto':>5}"
         lines = [
             "HIVE · Escáner de beacons " + ("(todos los dispositivos BLE)" if self.show_all else "(Estimote)"),
             f"{len(rows)} detectados · Ctrl + C para salir", "", head, "─" * len(head),
         ]
         for s in rows:
             age = now - s.last
-            ident = " · ".join(v[:12] for k, v in sorted(s.idents.items())) or (s.name or "")
-            beacon = s.idents.get("Estimote", "")[:8] or sorted(s.addresses)[0]
-            kinds = ",".join(sorted(k.replace("Eddystone-", "Ed-") for k in s.kinds)) or "—"
+            beacon = s.idents.get("Estimote", "")[:8] or (s.name or sorted(s.addresses)[0])[:9]
+            ibeacon = s.idents.get("iBeacon", "—")
             prox = "fuera de alcance" if age > OUT_OF_RANGE_S else proximity(s.distance)
             lines.append(
-                f"{label_for(s, catalog):<6}{beacon[:18]:<19}{ident[:25]:<26}{kinds[:21]:<22}"
-                f"{s.rssi_avg:>6.0f}{fmt_distance(s.distance):>9}  {prox:<12}{age:4.0f} s"
+                f"{label_for(s, catalog):<6}{beacon:<10}{ibeacon[:11]:<12}"
+                f"{s.rssi_avg:>5.0f}{fmt_distance(s.distance):>8}  {prox:<17}{age:>4.0f}s"
             )
         if not rows:
             lines.append("Aún no se ve ningún beacon. ¿Bluetooth encendido? Prueba también con --todos.")
