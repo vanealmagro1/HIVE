@@ -83,7 +83,8 @@
     const stored = (() => { try { return Number(localStorage.getItem('hive-umbral')); } catch { return NaN; } })();
     let NEAR_RSSI = Number(params.get('umbral')) || stored || -55;   // señal mínima para "acercado" (~10–20 cm)
     const MARGIN_DB = 6;            // debe ganar al segundo beacon por al menos 6 dB
-    const HOLD_MS = 600;            // sostenido al menos 0,6 s
+    const HOLD_MS = 300;            // sostenido al menos 0,3 s
+    const SAMPLES = 5;              // mediana de las últimas 5 lecturas (rápida y aún filtra picos)
     const DEBOUNCE_MS = 8000;       // misma caja + misma ubicación: una lectura cada 8 s
     const GONE_MS = 10000;
     const ESTIMOTE_SERVICE = '0000fe9a-0000-1000-8000-00805f9b34fb';
@@ -228,12 +229,12 @@
           const b = identify(ev);
           if (!b) return;
           const s = seen.get(b.etiqueta) || { rssi: [], last: 0 };
-          s.rssi.push(ev.rssi); if (s.rssi.length > 9) s.rssi.shift();
+          s.rssi.push(ev.rssi); if (s.rssi.length > SAMPLES) s.rssi.shift();
           s.last = Date.now();
           seen.set(b.etiqueta, s);
         });
         started = true;
-        setInterval(() => { evaluate(); renderScan(); render(); }, 400);
+        setInterval(() => { evaluate(); renderScan(); render(); }, 200);
       } catch (e) {
         $('diag').hidden = false;
         $('diag').innerHTML = `<div class="bad">✘ No se pudo iniciar: ${e.message}. Revisa Bluetooth, Ubicación y el permiso "Dispositivos cercanos" de Chrome.</div>`;
