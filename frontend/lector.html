@@ -50,6 +50,8 @@
     .scan.ok .big-tag { background: var(--ok); } .scan.warn .big-tag { background: var(--bad); }
     .scan .prod { font-size: 1.35rem; font-weight: 800; line-height: 1.2; }
     .scan .state { font-weight: 700; font-size: 0.9rem; } .scan.ok .state { color: var(--ok); } .scan.warn .state { color: var(--bad); }
+    .chip-n { display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 5px; border-radius: 7px; background: var(--ok); color: #fff; font-weight: 800; font-size: 0.75rem; }
+    .mode { display: flex; gap: 6px; margin-top: 10px; } .mode button { flex: 1; font: inherit; font-size: 0.82rem; font-weight: 700; border: 1px solid #d6d2e2; background: #fff; border-radius: 10px; padding: 8px; color: var(--ink); } .mode button.on { background: var(--soft); border-color: var(--purple); color: var(--purple); }
     details.diagbox summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; font-weight: 600; padding: 4px 2px; }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: .6; } }
   </style>
@@ -62,7 +64,7 @@
   </header>
   <main>
     <div class="sent" id="sent"></div>
-    <section class="card"><label class="loc">Estoy leyendo en<select id="loc"></select></label><div class="quick" id="quick"></div></section>
+    <section class="card"><label class="loc">Estoy leyendo en<select id="loc"></select></label><div class="quick" id="quick"></div><div class="mode"><button type="button" id="mSweep">⚡ Barrido rápido</button><button type="button" id="mPrecise">🎯 Preciso</button></div></section>
     <section class="card diag" id="diag" hidden></section>
     <button class="main" id="start" type="button">Empezar a leer</button>
     <p class="hint" id="hint">Toca "Empezar a leer" y acepta el permiso de Bluetooth.</p>
@@ -85,6 +87,11 @@
     const MARGIN_DB = 6;            // debe ganar al segundo beacon por al menos 6 dB
     const HOLD_MS = 300;            // sostenido al menos 0,3 s
     const SAMPLES = 5;              // mediana de las últimas 5 lecturas (rápida y aún filtra picos)
+    // Modo barrido: cuenta la caja con UNA lectura fuerte (pasar el celular por encima basta). Modo preciso: sostener.
+    let SWEEP = (() => { try { return localStorage.getItem('hive-barrido') !== '0'; } catch { return true; } })();
+    const SWEEP_MARGIN_DB = 3;      // en barrido, otra caja con señal casi igual en el mismo instante = ambiguo
+    let flash = null;               // { label, until }: caja recién leída en barrido (para mostrarla)
+    const sweepRead = new Map();    // etiqueta -> ms (cajas leídas en el barrido actual)
     const DEBOUNCE_MS = 8000;       // misma caja + misma ubicación: una lectura cada 8 s
     const GONE_MS = 10000;
     const ESTIMOTE_SERVICE = '0000fe9a-0000-1000-8000-00805f9b34fb';
@@ -173,8 +180,21 @@
       }
     }
 
+    /** Barrido: una sola lectura fuerte y sin otra caja igual de fuerte en ese instante → se cuenta de inmediato. */
+    function sweepCheck(label, rssi) {
+      if (rssi < NEAR_RSSI) return;
+      const now = Date.now();
+      for (const [other, o] of seen) {
+        if (other !== label && now - o.last < 500 && o.raw > rssi - SWEEP_MARGIN_DB) return;
+      }
+      flash = { label, until: now + 2500 };
+      if (now - (lastSent.get(`${label}|${$('loc').value}`) || 0) >= DEBOUNCE_MS) sweepRead.set(label, now);
+      send(label, rssi);
+    }
+
     function evaluate() {
       const now = Date.now();
+      if (SWEEP) { leader = flash && now < flash.until ? { label: flash.label, since: now } : null; if (!leader) lastSentLabel = null; return; }
       const ranked = [...seen.entries()].filter(([, s]) => now - s.last < 3000).map(([label, s]) => ({ label, med: median(s.rssi) })).sort((a, b) => b.med - a.med);
       const top = ranked[0];
       const clear = top && top.med >= NEAR_RSSI && (!ranked[1] || top.med - ranked[1].med >= MARGIN_DB);
@@ -183,12 +203,17 @@
       if (now - leader.since >= HOLD_MS) send(top.label, top.med);
     }
 
+    function sweepSummary() {
+      const recent = [...sweepRead.entries()].filter(([, t]) => Date.now() - t < 60000).map(([l]) => l);
+      return recent.length ? `<p style="margin-top:6px"><b>Leídas en este barrido:</b> ${recent.map((l) => `<span class="chip-n">${l}</span>`).join(' ')} · ${recent.length} de ${CATALOG.length}</p>` : '';
+    }
+
     /** Panel principal: el producto solo aparece cuando una caja queda pegada al celular. */
     function renderScan() {
       const el = $('scan');
       if (!started) { el.className = 'card scan'; el.innerHTML = '<div class="idle-icon">📦</div><h2>Lector listo</h2><p>Toca "Empezar a leer" para activar el Bluetooth.</p>'; return; }
       const b = leader && CATALOG.find((x) => x.etiqueta === leader.label);
-      if (!b) { el.className = 'card scan'; el.innerHTML = '<div class="idle-icon">📡</div><h2>Acerca el celular a una caja</h2><p>La etiqueta se lee al tocarla con el celular.</p>'; return; }
+      if (!b) { el.className = 'card scan'; el.innerHTML = `<div class="idle-icon">📡</div><h2>${SWEEP ? 'Pasa el celular por las cajas' : 'Acerca el celular a una caja'}</h2><p>${SWEEP ? 'Cada caja se cuenta al pasar por encima.' : 'Mantén el celular junto a la caja un momento.'}</p>${SWEEP ? sweepSummary() : ''}`; return; }
       const ok = b.ubicacion === $('loc').value;
       const sent = lastSentLabel === b.etiqueta;
       el.className = 'card scan found ' + (sent ? (ok ? 'ok' : 'warn') : '');
@@ -196,7 +221,8 @@
         <div class="prod">${b.producto}</div>
         <p>Caja ${b.unitId} · su lugar ${b.ubicacion}</p>
         <div class="state">${sent ? (ok ? '✓ Verificada · enviada a HIVE' : '⚠ Fuera de lugar · enviada a HIVE') : 'Leyendo etiqueta…'}</div>
-        ${sent ? '' : `<button class="send" data-label="${b.etiqueta}">Enviar ahora</button>`}`;
+        ${sent ? '' : `<button class="send" data-label="${b.etiqueta}">Enviar ahora</button>`}
+        ${SWEEP ? sweepSummary() : ''}`;
       el.querySelectorAll('button.send').forEach((x) => x.addEventListener('click', () => send(x.dataset.label, median(seen.get(x.dataset.label).rssi), true)));
     }
 
@@ -230,8 +256,9 @@
           if (!b) return;
           const s = seen.get(b.etiqueta) || { rssi: [], last: 0 };
           s.rssi.push(ev.rssi); if (s.rssi.length > SAMPLES) s.rssi.shift();
-          s.last = Date.now();
+          s.last = Date.now(); s.raw = ev.rssi;
           seen.set(b.etiqueta, s);
+          if (SWEEP) sweepCheck(b.etiqueta, ev.rssi);
         });
         started = true;
         setInterval(() => { evaluate(); renderScan(); render(); }, 200);
@@ -244,6 +271,11 @@
     function showUmbral() { $('umbral').value = NEAR_RSSI; $('umbralTxt').textContent = `${NEAR_RSSI} dBm`; }
     $('umbral').addEventListener('input', () => { NEAR_RSSI = Number($('umbral').value); try { localStorage.setItem('hive-umbral', String(NEAR_RSSI)); } catch {} showUmbral(); leader = null; });
     showUmbral();
+    function showMode() { $('mSweep').className = SWEEP ? 'on' : ''; $('mPrecise').className = SWEEP ? '' : 'on'; }
+    const setMode = (v) => { SWEEP = v; try { localStorage.setItem('hive-barrido', v ? '1' : '0'); } catch {} leader = null; flash = null; showMode(); };
+    $('mSweep').addEventListener('click', () => setMode(true));
+    $('mPrecise').addEventListener('click', () => setMode(false));
+    showMode();
     diag();
     loadCatalog().catch(() => { $('hint').textContent = 'No se pudo cargar el catálogo de beacons desde la laptop.'; });
     pingLaptop(); setInterval(pingLaptop, 4000);
