@@ -8,6 +8,7 @@ Los beacons son Bluetooth Low Energy, no RFID.
 |---|---|---|---|
 | 4 | CJ-0003 | Cuaderno universitario 100 h cuadros grandes | B-05-03 |
 | 7 | CJ-0022 | Esferográfico punta fina negro | B-01-03 |
+| 02 | CJ-0086 | Lápices de colores 12 colores | A-08-03 |
 
 El catálogo está en `beacons.json` (lo usan el celular, la app y el escáner). Etiquetas para imprimir: `etiquetas.html`.
 
@@ -33,7 +34,7 @@ El catálogo está en `beacons.json` (lo usan el celular, la app y el escáner).
 - **Sin celular:** el lector puede ser la laptop. Pega la caja a la laptop con
   `python scan_beacons.py --enviar --ubicacion B-05-03` (desde `beacons/`).
 - **Sin Bluetooth:** atajos ocultos en la laptop (con HIVE abierto):
-  `Alt+1/2` = beacon 4/7 leído en su ubicación · `Alt+Shift+1/2` = leído fuera de lugar.
+  `Alt+1/2/3` = beacon 4/7/02 leído en su ubicación · `Alt+Shift+1/2/3` = leído fuera de lugar.
 
 ## Escáner de la laptop (diagnóstico)
 Requisitos: Bluetooth encendido y `python -m pip install bleak`.

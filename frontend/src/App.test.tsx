@@ -127,9 +127,13 @@ describe('HIVE UI v2 · operaciones', () => {
 
     await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');
     expect(screen.getByTestId('live-boxes').textContent).toBe('2');
+    expect(screen.getByTestId('live-pending').textContent).toMatch(/etiqueta 02/);
     expect(screen.getByTestId('live-units').textContent).toBe('82');
     expect(within(screen.getByTestId('live-table')).getAllByRole('row')[1].textContent).toMatch(/Esferográfico punta fina negro/); // la más reciente arriba
     expect(screen.getByTestId('live-table').textContent).toMatch(/Fuera de lugar/);
+    await user.keyboard('{Alt>}3{/Alt}');
+    expect(screen.getByTestId('live-boxes').textContent).toBe('3');
+    expect(screen.getByTestId('live-units').textContent).toBe('100');
     expect(screen.queryByTestId('live-pending')).toBeNull();
     expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
   });

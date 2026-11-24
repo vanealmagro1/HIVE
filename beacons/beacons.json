@@ -1,6 +1,17 @@
 {
   "beacons": [
     {
+      "etiqueta": "02",
+      "beacon": "3E-A9-AC-1E-61",
+      "ids": [
+        "e562272095247aa7",
+        "e562272095247aa7e4bfae7362054d3d"
+      ],
+      "unitId": "CJ-0086",
+      "producto": "Lápices de colores 12 colores",
+      "ubicacion": "A-08-03"
+    },
+    {
       "etiqueta": "4",
       "beacon": "F5-70-69-1C-4A",
       "ids": [
@@ -26,6 +37,10 @@
     }
   ],
   "ubicaciones": [
+    {
+      "id": "A-08-03",
+      "nombre": "Pasillo A · bahía 08 · nivel 3"
+    },
     {
       "id": "B-01-03",
       "nombre": "Pasillo B · bahía 01 · nivel 3"

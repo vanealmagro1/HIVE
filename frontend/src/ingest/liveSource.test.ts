@@ -35,7 +35,7 @@ describe('lecturas en vivo de beacons', () => {
     const store = createDemoStore();
     const actions = createActions(store);
     expect(store.getState().units.find((u) => u.id === 'CJ-0003')!.verificationStatus).toBe('EXPECTED');
-    expect(beaconCount(store.getState())).toMatchObject({ verified: 0, total: 2, misplaced: 0 });
+    expect(beaconCount(store.getState())).toMatchObject({ verified: 0, total: 3, misplaced: 0 });
 
     const home = liveReadToEvent(read(), store.getState().referenceDate)!;
     actions.api.postEvent(home);
@@ -61,6 +61,6 @@ describe('lecturas en vivo de beacons', () => {
     const actions = createActions(store);
     for (const b of BEACON_BOXES) actions.simulateBeacon(b.label, 'home');
     expect(beaconCount(store.getState())).toMatchObject({ verified: BEACON_BOXES.length, misplaced: 0 });
-    expect(store.getState().lastMessage?.text).toMatch(/verificada en B-01-03/);
+    expect(store.getState().lastMessage?.text).toMatch(/verificada en A-08-03/);
   });
 });

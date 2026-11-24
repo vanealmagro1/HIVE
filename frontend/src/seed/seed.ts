@@ -109,6 +109,7 @@ function weeklySeries(skuId: string, unitsPerDay: number): DailyDemand[] {
 export const BEACON_BOXES: { label: string; unitId: string }[] = [
   { label: '4', unitId: 'CJ-0003' },  // Cuaderno universitario 100 h cuadros grandes · B-05-03
   { label: '7', unitId: 'CJ-0022' },  // Esferográfico punta fina negro · B-01-03
+  { label: '02', unitId: 'CJ-0086' }, // Lápices de colores 12 colores · A-08-03
 ];
 const BEACON_UNIT_IDS = new Set(BEACON_BOXES.map((b) => b.unitId));
 
