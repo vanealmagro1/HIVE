@@ -1,12 +1,32 @@
 {
   "beacons": [
     {
+      "etiqueta": "06",
+      "beacon": "38-DD-F6-A2-D7",
+      "ids": [
+        "42187:11477",
+        "56af5d4bef8e6e40",
+        "56af5d4bef8e6e408ac61977154a1e02"
+      ],
+      "unitId": null
+    },
+    {
       "etiqueta": "4",
       "beacon": "F5-70-69-1C-4A",
       "ids": [
         "1:1",
         "794134e389c99640",
         "794134e389c99640759575aef555b62e"
+      ],
+      "unitId": null
+    },
+    {
+      "etiqueta": "7",
+      "beacon": "3E-BF-98-36-82",
+      "ids": [
+        "2:2",
+        "d5cf581ebd4c7adc",
+        "d5cf581ebd4c7adc67ac2baedd5a650d"
       ],
       "unitId": null
     }
