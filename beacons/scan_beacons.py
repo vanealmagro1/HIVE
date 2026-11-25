@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import json
 import os
+import ssl
 import statistics
 import sys
 import time
@@ -171,11 +172,25 @@ class Scanner:
         return "\n".join(lines)
 
 
+def _tls_context() -> ssl.SSLContext:
+    """Certificados de certifi si está instalado (el almacén de Windows puede tener certificados vencidos)."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+TLS = _tls_context()
+
+
 def post_read(url: str, label: str, ubicacion: str, rssi: float) -> str:
     body = json.dumps({"beacon": label, "ubicacion": ubicacion, "rssi": round(rssi), "lector": "laptop",
                        "t": int(time.time() * 1000)}).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=3) as r:
+    # Cloudflare rechaza (403) el agente por defecto "Python-urllib": se identifica como lector de HIVE.
+    headers = {"Content-Type": "application/json", "User-Agent": "HIVE-lector-laptop/1.0"}
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=3, context=TLS) as r:
         data = json.loads(r.read().decode("utf-8"))
     return f"enviado (pantallas de HIVE escuchando: {data.get('pantallas', '?')})"
 
