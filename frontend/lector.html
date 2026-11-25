@@ -165,16 +165,18 @@
       lastSentLabel = label;
       const b = CATALOG.find((x) => x.etiqueta === label);
       const ok = b && b.ubicacion === ubicacion;
+      // Aviso inmediato (vibración + mensaje) sin esperar la respuesta de la red; si el envío falla, se corrige abajo.
+      if (navigator.vibrate) navigator.vibrate(ok ? 80 : [80, 60, 80]);
+      $('sent').className = 'sent show ' + (ok ? 'ok' : 'warn');
+      $('sent').innerHTML = `${ok ? '✓ Leída' : '⚠ Leída · fuera de su lugar'} · beacon ${label}<small>${b ? b.producto : ''} → ${ubicacion}</small>`;
+      clearTimeout(send.t); send.t = setTimeout(() => { $('sent').className = 'sent'; }, 3500);
       try {
         const r = await fetch('/api/lecturas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ beacon: label, ubicacion, rssi, lector: 'celular', t: now }) });
         if (!r.ok) throw new Error((await r.json()).error || r.status);
-        if (navigator.vibrate) navigator.vibrate(ok ? 80 : [80, 60, 80]);
-        $('sent').className = 'sent show ' + (ok ? 'ok' : 'warn');
-        $('sent').innerHTML = `${ok ? '✓ Enviado' : '⚠ Enviado · fuera de su lugar'} · beacon ${label}<small>${b ? b.producto : ''} → ${ubicacion}</small>`;
-        clearTimeout(send.t); send.t = setTimeout(() => { $('sent').className = 'sent'; }, 3500);
         sentLog.unshift(`${new Date(now).toLocaleTimeString()} · beacon ${label} → ${ubicacion}${ok ? '' : ' (fuera de lugar)'}`);
         $('log').innerHTML = '<strong style="color:var(--ink)">Enviadas a HIVE</strong>' + sentLog.slice(0, 6).map((l) => `<span>${l}</span>`).join('');
       } catch (e) {
+        lastSent.delete(key); // que la próxima señal lo reintente
         $('sent').className = 'sent show warn';
         $('sent').innerHTML = `No se pudo enviar<small>${e.message}. ¿La laptop está en la misma red?</small>`;
       }

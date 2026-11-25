@@ -9,6 +9,9 @@ Usa el Bluetooth de Windows a través de la librería bleak. No hace falta empar
     python scan_beacons.py --enviar --ubicacion B-05-03
                                         la laptop hace de lector: cuando un beacon queda PEGADO a ella,
                                         envía la lectura a HIVE (npm run dev:red debe estar corriendo)
+        --enviar https://hive.hive-demo.workers.dev/api/lecturas   lo mismo, a HIVE en Cloudflare
+        --umbral -55                    sensibilidad (más negativo = cuenta desde más lejos)
+        --preciso                       modo preciso (mediana + 1 s sostenido) en vez de barrido rápido
 
 Ctrl + C para salir.
 """
@@ -38,6 +41,8 @@ OUT_OF_RANGE_S = 10
 NEAR_RSSI = -50      # caja acercada al lector (la antena de la laptop es menos sensible que la del celular)
 MARGIN_DB = 6        # debe ganar al segundo beacon por al menos 6 dB
 DEBOUNCE_S = 8       # misma caja: una lectura cada 8 s
+SWEEP_MARGIN_DB = 3  # barrido: otra caja con señal casi igual en el mismo instante = ambiguo, no se cuenta
+SWEEP_WINDOW_S = 0.5
 DEFAULT_RELAY = "http://127.0.0.1:5174/api/lecturas"
 SMOOTHING = 9  # mediana de las últimas lecturas: ignora los picos típicos de BLE
 
@@ -50,6 +55,7 @@ class Seen:
     name: str | None = None
     rssi: deque = field(default_factory=lambda: deque(maxlen=SMOOTHING))
     last: float = 0.0
+    raw: float = -100.0  # última lectura sin suavizar (la usa el barrido)
     estimote: bool = False
     kinds: set = field(default_factory=set)
     idents: dict = field(default_factory=dict)  # tipo de paquete -> identificador
@@ -98,6 +104,7 @@ class Scanner:
         self.as_json = as_json
         self.devices: dict[str, Seen] = {}
         self.alias: dict[str, str] = {}  # familia de dirección -> beacon al que pertenece
+        self.on_read = None  # gancho por lectura: on_read(seen, rssi) (barrido de la laptop)
 
     def on_advertisement(self, device, adv) -> None:
         packets: list[Packet] = parse_advertisement(adv.manufacturer_data or {}, adv.service_data or {})
@@ -118,6 +125,7 @@ class Scanner:
         s.name = name or s.name
         s.rssi.append(adv.rssi)
         s.last = time.time()
+        s.raw = adv.rssi
         s.estimote = s.estimote or is_estimote
         for p in packets:
             s.kinds.add(p.kind)
@@ -129,6 +137,8 @@ class Scanner:
                 s.tx_at_1m = p.tx_at_1m
             if p.kind == "Eddystone-TLM":
                 s.telemetry = p.extra
+        if self.on_read and s.estimote:
+            self.on_read(s, adv.rssi)
         if self.as_json:
             print(json.dumps({
                 "t": round(s.last, 3), "beacon": s.key, "address": device.address, "rssi": adv.rssi,
@@ -173,13 +183,63 @@ def post_read(url: str, label: str, ubicacion: str, rssi: float) -> str:
 class Sender:
     """Decide cuándo un beacon está "pegado" a la laptop y envía la lectura a HIVE (mismo criterio que el celular)."""
 
-    def __init__(self, url: str, ubicacion: str):
+    def __init__(self, url: str, ubicacion: str, umbral: float = NEAR_RSSI, sweep: bool = True):
         self.url, self.ubicacion = url, ubicacion
+        self.umbral, self.sweep = umbral, sweep
         self.leader: str | None = None
         self.last_sent: dict[str, float] = {}
-        self.status = f"Lector de la laptop en {ubicacion}: pega una caja a la laptop."
+        self.swept: list[str] = []
+        self.sc: Scanner | None = None
+        self.catalog: list[dict] = []
+        self.loop: asyncio.AbstractEventLoop | None = None
+        modo = "barrido rápido: pasa las cajas junto a la laptop" if sweep else "preciso: pega una caja a la laptop"
+        self.status = f"Lector de la laptop en {ubicacion} · {modo} · umbral {umbral:.0f} dBm."
+
+    def attach(self, sc: "Scanner", catalog: list[dict]) -> None:
+        self.sc, self.catalog, self.loop = sc, catalog, asyncio.get_running_loop()
+        if self.sweep:
+            sc.on_read = self.sweep_check
+
+    def sweep_check(self, s: Seen, rssi: float) -> None:
+        """Barrido: una sola lectura fuerte, sin otra caja igual de fuerte en ese instante -> se envía de inmediato."""
+        if rssi < self.umbral or self.sc is None:
+            return
+        label = label_for(s, self.catalog)
+        if label in ("—", "?"):
+            return
+        now = time.time()
+        for o in self.sc.devices.values():
+            if o is not s and o.estimote and now - o.last < SWEEP_WINDOW_S and o.raw > rssi - SWEEP_MARGIN_DB:
+                return
+        self.dispatch(label, rssi, now)
+
+    def dispatch(self, label: str, rssi: float, now: float) -> None:
+        if now - self.last_sent.get(label, 0) < DEBOUNCE_S:
+            return
+        self.last_sent[label] = now
+        if label not in self.swept:
+            self.swept.append(label)
+        print("\a", end="", flush=True)  # pitido corto de la consola: caja leída
+        self.status = f"Beacon {label} → {self.ubicacion}: enviando…"
+        if self.loop is not None:
+            self.loop.create_task(self.post(label, rssi))
+
+    async def post(self, label: str, rssi: float) -> None:
+        try:
+            result = await asyncio.to_thread(post_read, self.url, label, self.ubicacion, rssi)
+            self.status = f"Beacon {label} → {self.ubicacion}: {result}"
+        except Exception as e:  # noqa: BLE001 — se informa en pantalla y se sigue escaneando
+            self.last_sent.pop(label, None)  # la próxima señal lo reintenta
+            self.status = f"No se pudo enviar el beacon {label}: {e}. ¿Hay internet / está corriendo el relé?"
+
+    def summary(self) -> str:
+        if not self.swept:
+            return ""
+        return f"Leídas en este barrido: {', '.join(self.swept)} · {len(self.swept)} de {len(self.catalog)}"
 
     async def tick(self, sc: "Scanner", catalog: list[dict]) -> None:
+        if self.sweep:
+            return
         now = time.time()
         ranked = sorted(
             ((label_for(s, catalog), s.rssi_avg) for s in sc.devices.values() if s.estimote and now - s.last < 3),
@@ -187,33 +247,30 @@ class Sender:
         )
         ranked = [r for r in ranked if r[0] != "—"]
         top = ranked[0] if ranked else None
-        clear = top is not None and top[1] >= NEAR_RSSI and (len(ranked) < 2 or top[1] - ranked[1][1] >= MARGIN_DB)
+        clear = top is not None and top[1] >= self.umbral and (len(ranked) < 2 or top[1] - ranked[1][1] >= MARGIN_DB)
         if not clear:
             self.leader = None
             return
         if self.leader != top[0]:  # debe sostenerse al menos 1 segundo (dos evaluaciones seguidas)
             self.leader = top[0]
             return
-        if now - self.last_sent.get(top[0], 0) < DEBOUNCE_S:
-            return
-        self.last_sent[top[0]] = now
-        try:
-            result = await asyncio.to_thread(post_read, self.url, top[0], self.ubicacion, top[1])
-            self.status = f"Beacon {top[0]} → {self.ubicacion}: {result}"
-        except Exception as e:  # noqa: BLE001 — se informa en pantalla y se sigue escaneando
-            self.status = f"No se pudo enviar el beacon {top[0]}: {e}. ¿Está corriendo npm run dev:red?"
+        self.dispatch(top[0], top[1], now)
 
 
 async def run_live(show_all: bool, as_json: bool, sender: Sender | None = None) -> None:
     sc = Scanner(show_all, as_json)
     catalog = load_catalog()
+    if sender:
+        sender.attach(sc, catalog)
     async with BleakScanner(detection_callback=sc.on_advertisement):
         while True:
             await asyncio.sleep(1)
             if sender:
                 await sender.tick(sc, catalog)
             if not as_json:
-                extra = f"\n\n{sender.status}" if sender else ""
+                extra = ""
+                if sender:
+                    extra = f"\n\n{sender.status}" + (f"\n{sender.summary()}" if sender.summary() else "")
                 sys.stdout.write("\x1b[2J\x1b[H" + sc.render(catalog) + extra + "\n")
                 sys.stdout.flush()
 
@@ -257,6 +314,8 @@ def main() -> None:
     ap.add_argument("--enviar", nargs="?", const=DEFAULT_RELAY, metavar="URL",
                     help=f"enviar a HIVE las cajas pegadas a la laptop (por defecto {DEFAULT_RELAY})")
     ap.add_argument("--ubicacion", default="B-05-03", help="ubicación donde está la laptop-lector (p. ej. B-05-03)")
+    ap.add_argument("--umbral", type=float, default=NEAR_RSSI, help=f"señal mínima en dBm (por defecto {NEAR_RSSI})")
+    ap.add_argument("--preciso", action="store_true", help="modo preciso (mediana + sostenido) en vez de barrido")
     args = ap.parse_args()
     if os.name == "nt":
         os.system("")  # habilita colores/ANSI en la consola de Windows
@@ -266,7 +325,7 @@ def main() -> None:
         if args.aprender:
             run_learn()
         else:
-            sender = Sender(args.enviar, args.ubicacion.upper()) if args.enviar else None
+            sender = Sender(args.enviar, args.ubicacion.upper(), args.umbral, not args.preciso) if args.enviar else None
             asyncio.run(run_live(args.todos, args.json, sender))
     except KeyboardInterrupt:
         print("\nEscáner detenido.")
