@@ -10,8 +10,9 @@ Usa el Bluetooth de Windows a través de la librería bleak. No hace falta empar
                                         la laptop hace de lector: cuando un beacon queda PEGADO a ella,
                                         envía la lectura a HIVE (npm run dev:red debe estar corriendo)
         --enviar https://hive.hive-demo.workers.dev/api/lecturas   lo mismo, a HIVE en Cloudflare
-        --umbral -55                    sensibilidad (más negativo = cuenta desde más lejos)
-        --preciso                       modo preciso (mediana + 1 s sostenido) en vez de barrido rápido
+        Por defecto, LECTURA MÚLTIPLE (como un lector RFID): toda etiqueta en alcance se cuenta a la vez.
+        --umbral -70                    sensibilidad (más negativo = cuenta desde más lejos)
+        --preciso                       modo preciso: una caja a la vez, pegada a la laptop
 
 Ctrl + C para salir.
 """
@@ -42,8 +43,7 @@ OUT_OF_RANGE_S = 10
 NEAR_RSSI = -50      # caja acercada al lector (la antena de la laptop es menos sensible que la del celular)
 MARGIN_DB = 6        # debe ganar al segundo beacon por al menos 6 dB
 DEBOUNCE_S = 8       # misma caja: una lectura cada 8 s
-SWEEP_MARGIN_DB = 3  # barrido: otra caja con señal casi igual en el mismo instante = ambiguo, no se cuenta
-SWEEP_WINDOW_S = 0.5
+MULTI_RSSI = -65     # lectura múltiple: etiquetas a ~30–50 cm de la laptop
 DEFAULT_RELAY = "http://127.0.0.1:5174/api/lecturas"
 SMOOTHING = 9  # mediana de las últimas lecturas: ignora los picos típicos de BLE
 
@@ -207,7 +207,7 @@ class Sender:
         self.sc: Scanner | None = None
         self.catalog: list[dict] = []
         self.loop: asyncio.AbstractEventLoop | None = None
-        modo = "barrido rápido: pasa las cajas junto a la laptop" if sweep else "preciso: pega una caja a la laptop"
+        modo = "lectura múltiple: acerca la laptop a las cajas" if sweep else "preciso: pega una caja a la laptop"
         self.status = f"Lector de la laptop en {ubicacion} · {modo} · umbral {umbral:.0f} dBm."
 
     def attach(self, sc: "Scanner", catalog: list[dict]) -> None:
@@ -216,17 +216,13 @@ class Sender:
             sc.on_read = self.sweep_check
 
     def sweep_check(self, s: Seen, rssi: float) -> None:
-        """Barrido: una sola lectura fuerte, sin otra caja igual de fuerte en ese instante -> se envía de inmediato."""
+        """Lectura múltiple: cada etiqueta con señal suficiente se envía de inmediato, sin importar las demás."""
         if rssi < self.umbral or self.sc is None:
             return
         label = label_for(s, self.catalog)
         if label in ("—", "?"):
             return
-        now = time.time()
-        for o in self.sc.devices.values():
-            if o is not s and o.estimote and now - o.last < SWEEP_WINDOW_S and o.raw > rssi - SWEEP_MARGIN_DB:
-                return
-        self.dispatch(label, rssi, now)
+        self.dispatch(label, rssi, time.time())
 
     def dispatch(self, label: str, rssi: float, now: float) -> None:
         if now - self.last_sent.get(label, 0) < DEBOUNCE_S:
@@ -250,7 +246,7 @@ class Sender:
     def summary(self) -> str:
         if not self.swept:
             return ""
-        return f"Leídas en este barrido: {', '.join(self.swept)} · {len(self.swept)} de {len(self.catalog)}"
+        return f"Leídas: {', '.join(self.swept)} · {len(self.swept)} de {len(self.catalog)}"
 
     async def tick(self, sc: "Scanner", catalog: list[dict]) -> None:
         if self.sweep:
@@ -329,7 +325,8 @@ def main() -> None:
     ap.add_argument("--enviar", nargs="?", const=DEFAULT_RELAY, metavar="URL",
                     help=f"enviar a HIVE las cajas pegadas a la laptop (por defecto {DEFAULT_RELAY})")
     ap.add_argument("--ubicacion", default="B-05-03", help="ubicación donde está la laptop-lector (p. ej. B-05-03)")
-    ap.add_argument("--umbral", type=float, default=NEAR_RSSI, help=f"señal mínima en dBm (por defecto {NEAR_RSSI})")
+    ap.add_argument("--umbral", type=float, default=None,
+                    help=f"señal mínima en dBm (por defecto {MULTI_RSSI} en lectura múltiple, {NEAR_RSSI} en preciso)")
     ap.add_argument("--preciso", action="store_true", help="modo preciso (mediana + sostenido) en vez de barrido")
     args = ap.parse_args()
     if os.name == "nt":
@@ -340,7 +337,9 @@ def main() -> None:
         if args.aprender:
             run_learn()
         else:
-            sender = Sender(args.enviar, args.ubicacion.upper(), args.umbral, not args.preciso) if args.enviar else None
+            sender = Sender(args.enviar, args.ubicacion.upper(),
+                            args.umbral if args.umbral is not None else (NEAR_RSSI if args.preciso else MULTI_RSSI),
+                            not args.preciso) if args.enviar else None
             asyncio.run(run_live(args.todos, args.json, sender))
     except KeyboardInterrupt:
         print("\nEscáner detenido.")

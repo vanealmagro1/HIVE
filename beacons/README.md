@@ -42,8 +42,8 @@ Publicar cambios (desde `frontend/`): `npm run deploy`. La primera vez: `npx wra
 ## Plan B
 - **Sin celular:** el lector puede ser la laptop. Pega la caja a la laptop con
   `python scan_beacons.py --enviar https://hive.hive-demo.workers.dev/api/lecturas --ubicacion B-05-03`
-  (o `--enviar` solo, con el servidor local). Por defecto en **barrido rápido**: pasa las cajas junto a la laptop y
-  cada una se cuenta al instante (pitido). `--umbral -55` cuenta desde más lejos; `--preciso` vuelve al modo lento.
+  (o `--enviar` solo, con el servidor local). Por defecto en **lectura múltiple** (como un lector RFID): acerca la laptop a las cajas y
+  todas las etiquetas en alcance se cuentan a la vez (pitido). `--umbral -70` lee desde más lejos, `--umbral -55` exige más cerca; `--preciso` = una caja a la vez.
 - **Sin Bluetooth:** atajos ocultos en la laptop (con HIVE abierto):
   `Alt+1…5` = beacon 4/7/5/11/01 leído en su ubicación · `Alt+Shift+1…5` = leído fuera de lugar.
 
