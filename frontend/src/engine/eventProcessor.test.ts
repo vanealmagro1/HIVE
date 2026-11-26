@@ -110,11 +110,12 @@ describe('validación de eventos', () => {
 });
 
 describe('recomendaciones y tareas', () => {
-  it('existe rec-moc-001 PROPOSED con impacto USD 2400 y rec-tin-001 USD 720; CAL-001 sin recomendación', () => {
+  it('existe rec-moc-001 PROPOSED con impacto USD 2400 y rec-tin-001 USD 720; CAL-001 solo por antigüedad', () => {
     const s = createInitialState();
     expect(s.recommendations.find((r) => r.id === 'rec-moc-001')).toMatchObject({ status: 'PROPOSED', estimatedImpactUsd: 2400, title: 'Redistribuir 300 unidades' });
     expect(s.recommendations.find((r) => r.id === 'rec-tin-001')).toMatchObject({ type: 'PRIORITIZE_FEFO', estimatedImpactUsd: 720 });
-    expect(s.recommendations.some((r) => r.skuId === 'CAL-001')).toBe(false);
+    // Sin demanda no hay sobrestock ni vencimiento que calcular; sí es inventario hueso (semáforo de antigüedad).
+    expect(s.recommendations.filter((r) => r.skuId === 'CAL-001').map((r) => r.type)).toEqual(['MOVE_AGED']);
   });
 
   it('aprobar crea exactamente una tarea task-rec-moc-001; repetir no duplica; stock y ubicaciones intactos', () => {

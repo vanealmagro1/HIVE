@@ -1,5 +1,6 @@
 // Estado único de la demo (única fuente de verdad para 3D, inventario, alertas y analítica).
 import { computeSkuAnalytics, type SkuAnalytics } from '../analytics/analytics';
+import { buildAgingRecommendations } from '../analytics/aging';
 import { buildAnalyticsRecommendations } from '../analytics/recommendations';
 import { REFERENCE_DATE } from '../domain/constants';
 import { stockByLot, stockBySku } from '../domain/inventory';
@@ -60,19 +61,22 @@ export function computeAnalytics(state: AnalyticsInput): SkuAnalytics[] {
 export function createInitialState(): DemoState {
   const seed = createSeed();
   const base = { ...seed, referenceDate: REFERENCE_DATE };
-  return {
+  const analyticsRecs = buildAnalyticsRecommendations(computeAnalytics(base));
+  const draft: DemoState = {
     ...base,
     environment: 'SIMULATION',
     events: [],
     discrepancies: [],
     alerts: [],
-    recommendations: buildAnalyticsRecommendations(computeAnalytics(base)),
+    recommendations: analyticsRecs,
     tasks: [],
     movements: [],
     audit: [{ seq: 1, message: 'Estado semilla cargado (datos sintéticos, fecha de referencia 2026-11-19).' }],
     ui: { selectedUnitId: null, view: 'twin', force2D: false, playback: null, section: 'dashboard', skuId: null, focusSeq: 0, live: 'off' },
     lastMessage: null,
   };
+  // Semáforo de antigüedad: acciones contra el inventario hueso (después de las de sobrestock y vencimiento).
+  return { ...draft, recommendations: [...analyticsRecs, ...buildAgingRecommendations(draft, analyticsRecs)] };
 }
 
 export function appendAudit(state: DemoState, message: string): AuditEntry[] {

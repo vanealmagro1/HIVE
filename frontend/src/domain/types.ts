@@ -58,6 +58,8 @@ export interface LogisticUnit {
   verificationStatus: VerificationStatus;
   lastObservedAt: ISODateTime | null;
   lastEventId: string | null;
+  /** Fecha de ingreso a la bodega (base del semáforo de antigüedad). En pallets mixtos, la de su caja más antigua. */
+  receivedAt?: ISODate;
 }
 
 export type EventSource = 'SIMULATED' | 'BLE' | 'RFID_FUTURE';
@@ -118,7 +120,9 @@ export interface Alert {
   createdAt: ISODateTime;
 }
 
-export type RecommendationType = 'REVIEW_EXCESS' | 'PRIORITIZE_FEFO' | 'VERIFY_LOCATION' | 'CLAIM_SHORTAGE';
+/** MOVE_AGED / LIQUIDATE_AGED / PRIORITIZE_FIFO: acciones del semáforo de antigüedad (inventario hueso). */
+export type RecommendationType = 'REVIEW_EXCESS' | 'PRIORITIZE_FEFO' | 'VERIFY_LOCATION' | 'CLAIM_SHORTAGE'
+  | 'MOVE_AGED' | 'LIQUIDATE_AGED' | 'PRIORITIZE_FIFO';
 export type RecommendationStatus = 'PROPOSED' | 'APPROVED' | 'REJECTED';
 
 export interface Recommendation {

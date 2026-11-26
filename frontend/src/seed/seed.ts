@@ -9,6 +9,7 @@
 import { addDays } from '../domain/dates';
 import { DEFAULT_TARGET_COVERAGE_DAYS, DEMAND_WINDOW_DAYS, REFERENCE_DATE } from '../domain/constants';
 import type { DailyDemand, Lot, LogisticUnit, PurchaseOrder, RemoteSite, SeedData, SKU } from '../domain/types';
+import { assignReceiptDates, withAgedDemandAtSouth } from './aging';
 import { buildStructure, generateInventory, HERO, LAST_RFID_SWEEP, WAREHOUSE_ID } from './generator';
 
 /** Ubicación libre reservada para el guion: allí el lector de mano "encuentra" PAL-001. */
@@ -137,6 +138,17 @@ function buildSeed(): SeedData {
   const { zones, racks, locations } = buildStructure();
   const reserved = new Set([...HERO_PALLETS.map((p) => p.locationId), DEMO_OBSERVED_LOCATION]);
   const gen = generateInventory({ referenceDate: REFERENCE_DATE, windowDays: DEMAND_WINDOW_DAYS, locations, racks, reserved });
+  const lots = [...HERO_LOTS, ...gen.lots];
+  const dailyDemand: DailyDemand[] = [
+    ...weeklySeries(HERO.MOCHILA, 10), // 300 en 30 días (patrón semanal)
+    ...dailySeries(HERO.TINTA, 4), // 120 en 30 días
+    // Calculadora: un único despacho antiguo, fuera de la ventana de 30 días.
+    { skuId: HERO.CALCULADORA, date: '2026-08-15', dispatchedBaseUnits: 20 },
+    ...gen.dailyDemand,
+  ];
+  // Fecha de ingreso de cada unidad (semáforo de antigüedad).
+  const units = assignReceiptDates(withBeaconBoxesUnread([...heroUnits(), ...gen.units]), lots, dailyDemand,
+    REFERENCE_DATE, addDays(REFERENCE_DATE, -DEMAND_WINDOW_DAYS));
   return {
     company: { id: 'CMP-DEMO', name: 'Distribuidora Andina · Papelería y Tecnología (ficticia)' },
     warehouse: { id: WAREHOUSE_ID, companyId: 'CMP-DEMO', name: 'Bodega Quito Norte (simulada)' },
@@ -144,21 +156,15 @@ function buildSeed(): SeedData {
     racks,
     locations,
     skus: [...HERO_SKUS, ...gen.skus],
-    lots: [...HERO_LOTS, ...gen.lots],
-    units: withBeaconBoxesUnread([...heroUnits(), ...gen.units]),
-    dailyDemand: [
-      ...weeklySeries(HERO.MOCHILA, 10), // 300 en 30 días (patrón semanal)
-      ...dailySeries(HERO.TINTA, 4), // 120 en 30 días
-      // Calculadora: un único despacho antiguo, fuera de la ventana de 30 días.
-      { skuId: HERO.CALCULADORA, date: '2026-08-15', dispatchedBaseUnits: 20 },
-      ...gen.dailyDemand,
-    ],
+    lots,
+    units,
+    dailyDemand,
     internalTransfers: [
       { skuId: HERO.MOCHILA, date: '2026-11-10', baseUnits: 40, note: 'Transferencia interna Bodega Quito Norte → local Centro (no es demanda)' },
     ],
     policies: HERO_SKUS.map((s) => ({ skuId: s.id, targetCoverageDays: DEFAULT_TARGET_COVERAGE_DAYS })),
     purchaseOrders: [demoPurchaseOrder()],
-    remoteSites: remoteSites(),
+    remoteSites: withAgedDemandAtSouth(remoteSites(), units, lots, REFERENCE_DATE, DEFAULT_TARGET_COVERAGE_DAYS, [HERO.MOCHILA, HERO.TINTA]),
   };
 }
 

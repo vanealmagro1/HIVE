@@ -1,7 +1,7 @@
 // Reducer puro: todas las mutaciones de la demo pasan por aquí.
 import { ingestEvent } from '../engine/ingest';
 import { closeReceipt } from '../engine/receiving';
-import { buildMovement, confirmMovement, startMovement } from '../engine/transfers';
+import { buildMovement, confirmMovement, isTransferRec, startMovement } from '../engine/transfers';
 import { getScenario } from '../engine/scenarios';
 import type { AlertStatus, InventoryEvent, Task } from '../domain/types';
 import { appendAudit, createInitialState, type DemoState, type Section, type View } from './demoState';
@@ -44,7 +44,7 @@ function approve(state: DemoState, id: string, at: string): DemoState {
     skuId: rec.skuId, quantity: rec.quantity ?? null, createdAt: at,
   };
   // Redistribución: se prepara el traslado (pallets disponibles, origen y destino válidos). No mueve inventario.
-  const planned = rec.type === 'REVIEW_EXCESS' ? buildMovement(state, rec, task, at) : null;
+  const planned = isTransferRec(rec) ? buildMovement(state, rec, task, at) : null;
   const movement = planned && 'movement' in planned ? planned.movement : null;
   const plan = movement ? ` Traslado ${movement.id} preparado (${movement.unitIds.join(', ')}), pendiente de ejecución.`
     : planned && 'error' in planned ? ` Traslado no preparado: ${planned.error}` : '';

@@ -1,7 +1,9 @@
 // Inventario: existencias por unidad logística y su estado de verificación.
-import { Search } from 'lucide-react';
+import { ArrowDownWideNarrow, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AGING_BANDS, ageDays, agingBand, type AgingKey } from '../../analytics/aging';
 import { formatNumber } from '../../domain/format';
+import { AgingChip, takePendingAging } from '../AgingCard';
 import type { DemoState } from '../../store/demoState';
 import { verification, VERIFICATION_FILTERS } from '../../store/operations';
 import { unitContents } from '../../store/selectors';
@@ -14,13 +16,17 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 export default function InventoryPage({ state, actions, onEvidence }: { state: DemoState; actions: Actions; onEvidence: (unitId: string) => void }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('ALL');
+  const [aging, setAging] = useState<AgingKey | 'ALL'>(takePendingAging);
+  const [oldestFirst, setOldestFirst] = useState(aging !== 'ALL');
   const [page, setPage] = useState(0);
   const rows = useMemo(() => state.units
     .filter((u) => !u.parentId && !u.expectedLocationId.startsWith('REC-'))
-    .map((u) => ({ unit: u, c: unitContents(state, u), v: verification(u) })), [state]);
+    .map((u) => ({ unit: u, c: unitContents(state, u), v: verification(u), days: ageDays(u, state.referenceDate) })), [state]);
   const nq = norm(q.trim());
   const filtered = rows.filter((r) => (filter === 'ALL' || r.v.label === filter)
+    && (aging === 'ALL' || (r.days !== null && agingBand(r.days).key === aging))
     && (!nq || norm(`${r.c.title} ${r.c.skuId ?? ''} ${r.unit.id} ${r.unit.expectedLocationId}`).includes(nq)));
+  if (oldestFirst) filtered.sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const cur = Math.min(page, pages - 1);
   const selected = state.units.find((u) => u.id === state.ui.selectedUnitId);
@@ -44,15 +50,25 @@ export default function InventoryPage({ state, actions, onEvidence }: { state: D
             <option value="ALL">Toda verificación</option>
             {VERIFICATION_FILTERS.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
+          <select className="select" value={aging} aria-label="Filtrar por antigüedad" data-testid="aging-filter"
+            onChange={(e) => { setAging(e.target.value as AgingKey | 'ALL'); setPage(0); }}>
+            <option value="ALL">Todo el semáforo</option>
+            {AGING_BANDS.map((b) => <option key={b.key} value={b.key}>{b.short} · {b.label}</option>)}
+          </select>
+          <button type="button" className={`btn btn-small${oldestFirst ? ' is-on' : ''}`} aria-pressed={oldestFirst}
+            onClick={() => { setOldestFirst(!oldestFirst); setPage(0); }}>
+            <ArrowDownWideNarrow size={14} /> Más antiguo primero
+          </button>
         </div>
         <table className="table" data-testid="inventory-table">
-          <thead><tr><th>Producto / SKU</th><th className="num">Cantidad</th><th>Ubicación asignada</th><th>Verificación</th><th /></tr></thead>
+          <thead><tr><th>Producto / SKU</th><th className="num">Cantidad</th><th>Ubicación asignada</th><th>Tiempo en bodega</th><th>Verificación</th><th /></tr></thead>
           <tbody>
-            {filtered.slice(cur * PAGE, cur * PAGE + PAGE).map(({ unit, c, v }) => (
+            {filtered.slice(cur * PAGE, cur * PAGE + PAGE).map(({ unit, c, v, days }) => (
               <tr key={unit.id} className={selectedRoot === unit.id ? 'is-selected-row' : undefined}>
                 <td><div className="cell-main">{c.title}</div><div className="cell-sub">{c.skuId ?? `${c.lines.length} productos`} · {unit.id}</div></td>
                 <td className="num">{formatNumber(c.qty)} uds.</td>
                 <td>{unit.expectedLocationId}{v.tone === 'bad' && <div className="cell-sub">leído en {unit.observedLocationId}</div>}</td>
+                <td>{days === null ? '—' : <><AgingChip days={days} /><div className="cell-sub">ingresó {unit.receivedAt}</div></>}</td>
                 <td><Chip tone={v.tone}>{v.label}</Chip></td>
                 <td className="row-actions">
                   <button type="button" className="btn btn-small" onClick={() => actions.locateUnit(unit.id)}>Ver en gemelo</button>
@@ -60,7 +76,7 @@ export default function InventoryPage({ state, actions, onEvidence }: { state: D
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="empty">Sin resultados.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="empty">Sin resultados.</td></tr>}
           </tbody>
         </table>
         <div className="table-foot">

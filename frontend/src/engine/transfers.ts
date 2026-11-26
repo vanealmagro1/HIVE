@@ -81,9 +81,12 @@ export function planTransfer(state: DemoState, skuId: string, quantity: number, 
   return { ok: true, unitIds: chosen.map((u) => u.id), originLocationIds: chosen.map((u) => u.expectedLocationId), destination };
 }
 
+/** Recomendaciones que se ejecutan como traslado entre bodegas (sobrestock e inventario hueso). */
+export const isTransferRec = (rec: Pick<Recommendation, 'type'>) => rec.type === 'REVIEW_EXCESS' || rec.type === 'MOVE_AGED';
+
 /** Crea el movimiento PLANNED asociado a la tarea (se llama al aprobar una recomendación de redistribución). */
 export function buildMovement(state: DemoState, rec: Recommendation, task: Task, at: string): { movement: Movement } | { error: string } {
-  if (rec.type !== 'REVIEW_EXCESS' || !rec.skuId || !task.quantity) return { error: 'La recomendación no es un traslado.' };
+  if (!isTransferRec(rec) || !rec.skuId || !task.quantity) return { error: 'La recomendación no es un traslado.' };
   const plan = planTransfer(state, rec.skuId, task.quantity);
   if (!plan.ok) return { error: plan.reason };
   return {

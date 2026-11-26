@@ -3,7 +3,8 @@ import { ArrowRight, Check, Forklift, PackageCheck } from 'lucide-react';
 import { useState } from 'react';
 import { formatNumber, formatUsd } from '../../domain/format';
 import type { Movement, Recommendation, Task } from '../../domain/types';
-import { planTransfer, siteName, transferCandidates, transferComparison, type TransferComparison } from '../../engine/transfers';
+import { skuAging } from '../../analytics/aging';
+import { isTransferRec, planTransfer, siteName, transferCandidates, transferComparison, type TransferComparison } from '../../engine/transfers';
 import { computeAnalytics, type DemoState } from '../../store/demoState';
 import type { Actions } from '../actions';
 import { Chip, PageHead, warehouseLabel } from '../layout/Shell';
@@ -13,6 +14,9 @@ const TYPE_CHIP: Record<Recommendation['type'], { label: string; tone: 'warn' | 
   PRIORITIZE_FEFO: { label: 'Vencimiento', tone: 'bad' },
   VERIFY_LOCATION: { label: 'Ubicación', tone: 'info' },
   CLAIM_SHORTAGE: { label: 'Faltante', tone: 'bad' },
+  MOVE_AGED: { label: 'Inventario hueso', tone: 'bad' },
+  LIQUIDATE_AGED: { label: 'Liquidación', tone: 'bad' },
+  PRIORITIZE_FIFO: { label: 'Se está estancando', tone: 'warn' },
 };
 const MOVEMENT: Record<Movement['status'], { label: string; tone: 'sim' | 'info' | 'ok' }> = {
   PLANNED: { label: 'Pendiente de ejecución', tone: 'sim' },
@@ -51,13 +55,30 @@ function BeforeAfter({ c }: { c: TransferComparison }) {
   );
 }
 
+const AGING_TYPES = new Set<Recommendation['type']>(['MOVE_AGED', 'LIQUIDATE_AGED', 'PRIORITIZE_FIFO']);
+const SCALE_MAX = 360;
+
+/** Barra del semáforo con la marca de cuántos días lleva el producto en bodega. */
+function AgeMeter({ days }: { days: number }) {
+  return (
+    <div className="rec-age" data-testid="rec-age">
+      <div className="rec-age-bar"><span className="rec-age-mark" style={{ left: `${Math.min(100, (days / SCALE_MAX) * 100)}%` }} /></div>
+      <div className="rec-age-scale">
+        {[0, 90, 180, SCALE_MAX].map((d) => <span key={d} style={{ left: `${(d / SCALE_MAX) * 100}%` }}>{d === SCALE_MAX ? `${d}+ d` : `${d} d`}</span>)}
+      </div>
+    </div>
+  );
+}
+
 function RecCard({ state, actions, rec, onTask }: { state: DemoState; actions: Actions; rec: Recommendation; onTask: () => void }) {
   const a = rec.skuId ? computeAnalytics(state).find((x) => x.skuId === rec.skuId) : undefined;
   const skuName = a?.skuName ?? rec.skuId ?? '';
   const chip = TYPE_CHIP[rec.type];
   const m = state.movements.find((x) => x.recommendationId === rec.id);
-  const plan = rec.type === 'REVIEW_EXCESS' && rec.skuId && !m ? planTransfer(state, rec.skuId, rec.quantity ?? 0) : null;
-  const dest = rec.type === 'REVIEW_EXCESS' && rec.skuId ? transferCandidates(state, rec.skuId)[0] : undefined;
+  const transfer = isTransferRec(rec);
+  const plan = transfer && rec.skuId && !m ? planTransfer(state, rec.skuId, rec.quantity ?? 0) : null;
+  const dest = transfer && rec.skuId ? transferCandidates(state, rec.skuId)[0] : undefined;
+  const age = AGING_TYPES.has(rec.type) && rec.skuId ? skuAging(state).find((x) => x.skuId === rec.skuId) : undefined;
   const pallets = m?.unitIds ?? (plan?.ok ? plan.unitIds : []);
   const origins = m?.originLocationIds ?? (plan?.ok ? plan.originLocationIds : []);
   const firstUnit = pallets[0] ?? rec.unitId;
@@ -68,7 +89,7 @@ function RecCard({ state, actions, rec, onTask }: { state: DemoState; actions: A
       <div className="rec-top">
         <div>
           <h2 className="card-title">{rec.type === 'REVIEW_EXCESS' ? `Redistribuir ${skuName}` : rec.title}</h2>
-          <p className="card-sub">{rec.skuId ?? rec.unitId ?? ''} · {rec.type === 'REVIEW_EXCESS' ? 'Transferencia entre bodegas' : chip.label}</p>
+          <p className="card-sub">{rec.skuId ?? rec.unitId ?? ''} · {transfer ? 'Transferencia entre bodegas' : chip.label}</p>
         </div>
         {rec.status === 'PROPOSED' ? <Chip tone={chip.tone}>{chip.label}</Chip>
           : rec.status === 'APPROVED' ? <Chip tone="ok"><Check size={12} /> Aprobada</Chip> : <Chip tone="sim">Rechazada</Chip>}
@@ -78,7 +99,8 @@ function RecCard({ state, actions, rec, onTask }: { state: DemoState; actions: A
           ? `${city} tiene ${formatNumber(a.coverageDays ?? 0)} días de cobertura frente a un objetivo de ${a.targetCoverageDays}. ${short(dest.site.name)} tiene ${formatNumber(dest.coverageDays, 1)} días de cobertura.`
           : rec.reason}
       </p>
-      {rec.type === 'REVIEW_EXCESS' ? (
+      {age && <AgeMeter days={age.maxDays} />}
+      {transfer ? (
         <dl className="rec-grid">
           <div><dt>Cantidad sugerida</dt><dd>{formatNumber(rec.quantity ?? 0)} unidades</dd></div>
           <div><dt>Origen</dt><dd>{city} · {origins.join(' · ') || '—'}</dd></div>
@@ -86,12 +108,19 @@ function RecCard({ state, actions, rec, onTask }: { state: DemoState; actions: A
           <div><dt>Unidad logística</dt><dd>{pallets.join(' · ') || '—'}</dd></div>
         </dl>
       ) : rec.estimatedImpactUsd !== null && (
-        <dl className="rec-grid"><div><dt>Impacto estimado</dt><dd>{formatUsd(rec.estimatedImpactUsd)}</dd></div></dl>
+        <dl className="rec-grid">
+          {age && <div><dt>Tiempo en bodega</dt><dd>hasta {formatNumber(age.maxDays)} días</dd></div>}
+          {age && rec.quantity ? <div><dt>Unidades</dt><dd>{formatNumber(rec.quantity)} u</dd></div> : null}
+          <div><dt>{age ? 'Pérdida evitada' : 'Impacto estimado'}</dt><dd>{formatUsd(rec.estimatedImpactUsd)}</dd></div>
+        </dl>
+      )}
+      {rec.type === 'MOVE_AGED' && rec.estimatedImpactUsd !== null && (
+        <p className="note" style={{ margin: 0 }}>Pérdida evitada estimada: <strong>{formatUsd(rec.estimatedImpactUsd)}</strong> · lleva hasta {formatNumber(age?.maxDays ?? 0)} días sin rotar aquí.</p>
       )}
       <div className="rec-btns">
         {rec.status === 'PROPOSED' && <button type="button" className="btn btn-primary" onClick={() => actions.approve(rec.id)}>Aprobar recomendación</button>}
         {rec.status === 'APPROVED' && <button type="button" className="btn btn-primary" onClick={onTask}>Ver tarea <ArrowRight size={15} /></button>}
-        {firstUnit && <button type="button" className="btn" onClick={() => actions.locateUnit(firstUnit)}>Ver pallet de origen</button>}
+        {firstUnit && <button type="button" className="btn" onClick={() => actions.locateUnit(firstUnit)}>{transfer ? 'Ver pallet de origen' : 'Ver en gemelo'}</button>}
         {rec.skuId && <button type="button" className="btn" onClick={() => { actions.setSku(rec.skuId!); actions.setSection('analitica'); }}>Ver analítica</button>}
         {rec.status === 'PROPOSED' && <button type="button" className="btn btn-ghost" onClick={() => actions.reject(rec.id)}>Rechazar</button>}
       </div>

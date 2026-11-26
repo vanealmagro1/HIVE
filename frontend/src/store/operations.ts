@@ -194,7 +194,7 @@ export function movementsByDay(state: DemoState, days: number): DayMovement[] {
   return dates.map((d) => map.get(d)!);
 }
 
-export interface AttentionItem { id: string; kind: 'location' | 'verify' | 'stock' | 'receipt' | 'expiry'; title: string; desc: string; unitId: string | null; skuId: string | null }
+export interface AttentionItem { id: string; kind: 'location' | 'verify' | 'stock' | 'receipt' | 'expiry' | 'aging'; title: string; desc: string; unitId: string | null; skuId: string | null }
 
 /** Lo que requiere atención: alertas abiertas y recomendaciones propuestas. */
 export function attentionItems(state: DemoState): AttentionItem[] {
@@ -214,6 +214,7 @@ export function attentionItems(state: DemoState): AttentionItem[] {
     const sku = state.skus.find((k) => k.id === r.skuId)?.name || r.skuId;
     if (r.type === 'REVIEW_EXCESS') items.push({ id: r.id, kind: 'stock', title: 'Sobrestock proyectado', desc: `${sku} · ${formatNumber(r.quantity ?? 0)} unidades excedentes`, unitId: null, skuId: r.skuId });
     else if (r.type === 'PRIORITIZE_FEFO') items.push({ id: r.id, kind: 'expiry', title: 'Riesgo de vencimiento', desc: `${sku} · ${r.title}`, unitId: null, skuId: r.skuId });
+    else if (r.type === 'MOVE_AGED' || r.type === 'LIQUIDATE_AGED') items.push({ id: r.id, kind: 'aging', title: 'Inventario hueso', desc: `${sku} · ${r.type === 'MOVE_AGED' ? 'mover a otra bodega' : 'promoción o liquidación'}`, unitId: null, skuId: r.skuId });
   }
   return items;
 }

@@ -122,7 +122,8 @@ describe('HIVE UI v2 · operaciones', () => {
     expect(screen.getByTestId('live-boxes').textContent).toBe('1');
     expect(screen.getByTestId('live-units').textContent).toBe('20');
     const table = screen.getByTestId('live-table');
-    expect(table.textContent).toMatch(/Cuaderno universitario 100 h cuadros grandesCJ-000320 uB-05-03✓ Contada/);
+    // La caja del beacon 4 lleva 342 días en bodega: el lector descubre inventario hueso en vivo.
+    expect(table.textContent).toMatch(/Cuaderno universitario 100 h cuadros grandesCJ-000320 uB-05-03342 díasCrítico✓ Contada/);
     expect(screen.getByTestId('last-message').textContent).toMatch(/\(CJ-0003\) verificada en B-05-03/);
 
     await user.keyboard('{Alt>}{Shift>}2{/Shift}{/Alt}');
@@ -142,6 +143,27 @@ describe('HIVE UI v2 · operaciones', () => {
     expect(screen.getByTestId('live-units').textContent).toBe('253');
     expect(screen.queryByTestId('live-pending')).toBeNull();
     expect(within(screen.getByTestId('attention-list')).getByText('Discrepancia de ubicación')).toBeTruthy();
+  });
+
+  it('Semáforo: una ficha abre Inventario filtrado por color y Acciones propone qué hacer con el inventario hueso', async () => {
+    const user = userEvent.setup();
+    render(<App store={createDemoStore()} playback={FAST} />);
+    const card = screen.getByTestId('aging-card');
+    expect(within(card).getByText('Rota bien')).toBeTruthy();
+    expect(within(card).getByText('Inventario hueso')).toBeTruthy();
+    expect(screen.getByTestId('aging-risk').textContent).toMatch(/en riesgo de perderse/);
+
+    await user.click(screen.getByTestId('aging-rojo'));
+    expect(screen.getByTestId('page-inventario')).toBeTruthy();
+    expect((screen.getByTestId('aging-filter') as HTMLSelectElement).value).toBe('rojo');
+    const rows = within(screen.getByTestId('inventory-table')).getAllByRole('row').slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.textContent).toMatch(/\d+ días(Inventario hueso|Crítico)/);
+
+    await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: /^Acciones/ }));
+    expect(screen.getAllByText(/de inventario hueso a Bodega Quito Sur/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Promoción o liquidación de/).length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('rec-age').length).toBeGreaterThan(0);
   });
 
   it('la navegación lateral abre cada sección', async () => {
